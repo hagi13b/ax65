@@ -1,0 +1,59 @@
+// src/operators.ax65 — 演算子：あふれ、checked と saturating、ビット演算、掛け算と割り算
+use console;                            // 1 文字の出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+use bcd;                                // u16 の表示に使う
+use core::{mul8, divmod8, Nz8};         // 掛け算・割り算の関数と、0 でない値の型
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+fn print_u16(n: u16) {                  // 0〜65535 を出す
+    let b = bcd::from_u16(n);           // BCD にする
+    let started = false;                // 0 以外の桁が出たか
+    for d in b.digits() {               // 上の桁から 1 桁ずつ
+        if d != 0 { started = true; }
+        if started { console::putc(('0' as u8 + d) as char); }
+    }
+    if !started { console::putc('0'); }
+}
+
+fn show(label: str, v: u8) {            // 「名前 = 値」の 1 行を出す
+    print(label);
+    print_u8(v);
+    newline();
+}
+
+fn main() {
+    let a: u8 = 250;
+
+    show(p"A+10          = ", a + 10);              // 一周して 4
+    match a.checked_add(10) {                       // あふれたら None
+        Some(v) => show(p"CHECKED_ADD   = ", v),
+        None    => { print(p"CHECKED_ADD   = NONE"); newline(); }
+    }
+    show(p"SATURATING    = ", a.saturating_add(10)); // 255 で止まる
+    show(p"A & $0F       = ", a & $0F);             // 下位 4 ビット：10
+    show(p"A >> 2        = ", a >> 2);              // 右へ 2 ビット：62
+    show(p"!A            = ", !a);                  // ビット反転：5
+    show(p"A / 8         = ", a / 8);               // 2 のべき乗の割り算は演算子で書ける：31
+    show(p"A % 8         = ", a % 8);               // 2 のべき乗の余り：2
+    show(p"A * 3 (U8)    = ", a * 3);               // 定数の掛け算（一周して 238）
+
+    print(p"MUL8(A, 3)    = ");
+    print_u16(mul8(a, 3));                          // 変数同士でも使える掛け算（結果は u16）：750
+    newline();
+
+    let qr = divmod8(a, 7);                         // 7 は定数なので、そのまま Nz8 として渡せる
+    show(p"A / 7         = ", qr.q);                // 商：35
+    show(p"A % 7         = ", qr.r);                // 余り：5
+
+    for k in 0..3 {                                 // 0、1、2 で割ってみる
+        if let Some(d) = Nz8::check(k) {            // 0 でないことを確かめる
+            show(p"A / K         = ", divmod8(a, d).q);
+        } else {
+            print(p"A / 0         : SKIPPED");      // 0 では割らない
+            newline();
+        }
+    }
+}

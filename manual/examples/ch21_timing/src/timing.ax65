@@ -1,0 +1,59 @@
+// src/timing.ax65 — 正確なタイミング：io_span・cycles・max_cycles・delay
+//   GPIO のポートA の PA4（ユーザー LED の D3）を「測定用のピン」として使う（ロジックアナライザやオシロスコープで見る）。
+//   このプログラムはポートA を自分で持つので、hw::user_io とは一緒に use しない。
+//   v2 のクロックでは us() がちょうどのサイクル数にならないので、inexact_time の警告が出る（切り上げて待つ）。
+use core::us;                           // マイクロ秒をサイクル数にする
+use lib::out::{print, newline};         // 端末への出力
+
+io(out) ORA:  u8 @ $8001;               // ポートA の出力
+io(out) DDRA: u8 @ $8003;               // ポートA の向き
+
+init {
+    ORA  = $00;                         // はじめは 0
+    DDRA = $10;                         // PA4 だけ出力にする（ほかの LED とスイッチは触らない）
+}
+
+range Bit = 0..8;                       // ビットの番号
+const MASK: [u8; Bit] = [$01, $02, $04, $08, $10, $20, $40, $80];
+
+range Sid = 0..8;                       // 処理する物の番号
+static POS: [u8; Sid] = [0; Sid];       // 物の位置
+static VEL: [i8; Sid] = [1, -1, 2, -2, 1, -1, 2, -2];  // 物の速さ
+
+fn pulse_6us() {                        // PA4 に、幅 6 マイクロ秒以上（ちょうど 12 サイクル）のパルスを出す
+    io_span(us(6)) {                    // 1 回目の書き込みから 2 回目の書き込みまでを、ちょうどにそろえる
+        ORA = $10;                      // PA4 = 1
+        ORA = $00;                      // PA4 = 0
+    }
+}
+
+fn send_bits(v: u8) {                   // 8 ビットを下の桁から 1 本の線で送る（1 ビットごとに同じ時間）
+    for k in Bit {
+        cycles(24) {                    // 中の命令がちょうど 24 サイクル（分岐の両方をそろえる）
+            if v & MASK[k] != 0 { ORA = $10; } else { ORA = $00; }
+        }
+    }
+    ORA = $00;                          // 最後は 0 に戻す
+}
+
+fn update_all() {                       // 全部の物を動かす
+    for s in Sid { POS[s] = POS[s] + VEL[s]; }  // u8 + i8 → u8
+}
+
+fn main() {
+    print(p"SENDING PULSES ON PA4 (LED D3)");
+    newline();
+    let n: u8 = 100;
+    while n > 0 {
+        pulse_6us();
+        delay(us(100));                 // 最低 100 マイクロ秒あける（185 サイクル）
+        send_bits($A5);                 // 1010_0101 を送る
+        delay(us(1000));                // 最低 1 ミリ秒あける（1843 サイクル）
+        max_cycles(400) {               // この処理は 400 サイクル以内に終わらなければならない（超えたらエラー）
+            update_all();
+        }
+        n -= 1;
+    }
+    print(p"DONE");
+    newline();
+}

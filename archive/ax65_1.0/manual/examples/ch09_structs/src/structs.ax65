@@ -1,0 +1,75 @@
+// src/structs.ax65 — 構造体：値の書き方、構造体の配列、構造体を返す関数、#[packed]
+use console;                            // 1 文字の出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+struct Monster { hp: u8, atk: u8, x: u8 }   // 体力、攻撃力、位置
+
+const SLIME: Monster = Monster { hp: 5, atk: 1, x: 0 };    // すべてのフィールドを書く
+const BOSS: Monster = Monster { hp: 30, atk: 5, ..SLIME }; // 書いていない x は SLIME から取る
+
+range Mon = 0..4;                       // モンスターの番号（0〜3）
+static PARTY: [Monster; Mon] = [SLIME, SLIME, SLIME, BOSS];    // 4 体（フィールドごとの配列になる）
+
+#[packed]
+struct Header { magic: u8, ver: u8, size: u16 }     // 1 要素を連続したバイト列として並べる
+comptime assert(size_of(Header) == 4, "Header は 4 バイトでなければならない");
+
+struct Stats { alive: u8, total_hp: u16 }   // 集計の結果（2 つの値をまとめて返す）
+
+fn hit(m: Mon, dmg: u8) -> bool {       // 攻撃して、倒れたら true
+    PARTY[m].hp = PARTY[m].hp.saturating_sub(dmg);  // 0 より下にはならない
+    PARTY[m].hp == 0
+}
+
+fn stats() -> Stats {                   // 生きている数と、体力の合計
+    let alive = 0;
+    let total: u16 = 0;
+    for m in Mon {
+        if PARTY[m].hp > 0 { alive += 1; }
+        total += PARTY[m].hp as u16;
+    }
+    Stats { alive: alive, total_hp: total }
+}
+
+fn show() {                             // 全員の体力を表示する
+    for m in Mon {
+        print(p"MON");
+        print_u8(m as u8);
+        print(p" HP=");
+        print_u8(PARTY[m].hp);
+        print(p" X=");
+        print_u8(PARTY[m].x);
+        newline();
+    }
+    let s = stats();
+    print(p"ALIVE=");
+    print_u8(s.alive);
+    print(p" TOTAL HP LOW BYTE=");
+    print_u8(s.total_hp as u8);
+    newline();
+}
+
+fn main() {
+    for m in Mon {
+        PARTY[m].x = m as u8 * 8;       // 8 マスおきに並べる（定数の掛け算）
+    }
+    show();
+    let turn = 1;
+    while stats().alive > 0 {           // 全員倒れるまで
+        for m in Mon {
+            if hit(m, 4) {              // 4 のダメージ
+                print(p"MON");
+                print_u8(m as u8);
+                print(p" DOWN IN ROUND ");
+                print_u8(turn);
+                newline();
+            }
+        }
+        turn += 1;
+    }
+    show();
+}

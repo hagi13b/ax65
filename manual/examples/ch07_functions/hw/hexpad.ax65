@@ -1,0 +1,109 @@
+// hw/hexpad.ax65 — HEXPAD（7 セグメント LED 6 桁とキー 20 個）のレジスタを直接使うモジュール（$8800〜$880D）
+//   表示とキーは CPLD が HEXPAD と自動でやり取りしている。プログラムはレジスタを読み書きするだけでよい。
+//   HP_HEX0〜2：1 バイトを 16 進 2 桁で表示する（HP_HEX0 が右の 2 桁、HP_HEX2 が左の 2 桁）。
+//   HP_DIGIT0〜5：1 桁ずつ表示コード（0〜31）を書く（HP_DIGIT0 が右端、HP_DIGIT5 が左端）。
+//   HP_KEY：ビット7 が「新しく押されたキーあり」、ビット4〜0 がキーコード。読むとビット7 が消える。
+
+pub range Pair = 0..3;                  // 2 桁ずつの位置（0 = 右の 2 桁、1 = 中の 2 桁、2 = 左の 2 桁）
+pub range Digit = 0..6;                 // 1 桁ずつの位置（0 = 右端 … 5 = 左端）
+pub range Level = 0..8;                 // 明るさ（0〜7）
+
+io(in)  HP_KEY:   u8          @ $8800;  // キー（読むとビット7 が消えるので、読むのは key() の 1 か所だけにする）
+io(out) HP_CTRL:  u8          @ $8802;  // 制御（ビット7 = RST でリセット、ビット3 = 表示 ON、ビット2〜0 = 明るさ）
+io(rmw) HP_HEX:   [u8; Pair]  @ $8804;  // 2 桁ずつの表示（$8804〜$8806。読むと表示中の値が返るので RMW 命令を許す）
+io      HP_DIGIT: [u8; Digit] @ $8808;  // 1 桁ずつの表示（$8808〜$880D）
+
+pub const KEY_JMP: u8 = $11;            // キーコード：JMP（0〜F のキーは $00〜$0F）
+pub const KEY_AD:  u8 = $12;            // キーコード：A/D
+pub const KEY_INC: u8 = $13;            // キーコード：INC
+pub const BLANK:   u8 = 20;             // 表示コード：空白
+
+pub const fn seg(c: char) -> u8 {       // 文字を表示コードにする（コンパイル時にも実行時にも呼べる）
+    match c {
+        '0' | 'O'   => 28,              // 数字の形の 0（コード 0 は o の形になる）
+        'o'         => 0,               // o の形
+        '1'..='9'   => c as u8 - '0' as u8,     // 1〜9 は数字そのもの
+        'A' | 'a'   => 10,
+        'B' | 'b'   => 11,              // b の形
+        'C'         => 12,
+        'c'         => 30,
+        'D' | 'd'   => 13,              // d の形
+        'E' | 'e'   => 14,
+        'F' | 'f'   => 15,
+        'S' | 's'   => 5,               // 5 の形で代用する
+        'I' | 'i'   => 1,               // 1 の形で代用する
+        '-'         => 16,
+        'H' | 'h'   => 17,
+        '='         => 18,              // 三本線
+        'J' | 'j'   => 19,
+        'L' | 'l'   => 21,
+        'P' | 'p'   => 22,
+        'N' | 'n'   => 23,              // n の形
+        'R' | 'r'   => 24,              // r の形
+        'U'         => 25,
+        'u'         => 31,
+        'T' | 't'   => 26,              // t の形
+        'Y' | 'y'   => 27,              // y の形
+        '_'         => 29,
+        _           => BLANK,           // それ以外は空白
+    }
+}
+
+pub fn show_hex(p: Pair, v: u8) {       // 1 バイトを 16 進 2 桁で表示する
+    HP_HEX[p] = v;
+}
+
+pub fn inc_hex(p: Pair) {               // 表示中の 2 桁を、そのまま 1 増やす（inc 命令 1 つ。FF の次は 00）
+    HP_HEX[p] += 1;
+}
+
+pub fn show_code(d: Digit, code: u8) {  // 1 桁に表示コードを書く
+    HP_DIGIT[d] = code;
+}
+
+pub fn clear() {                        // 6 桁を全部空白にする
+    for d in Digit { HP_DIGIT[d] = BLANK; }
+}
+
+pub fn show_text(s: str) {              // 文字列を左端から表示する（7 文字目からは捨て、足りない桁は空白）
+    let n: u8 = 6;                      // まだ書いていない桁の数
+    for c in s {
+        if n == 0 { break; }
+        n -= 1;
+        if let Some(d) = Digit::check(n) { HP_DIGIT[d] = seg(c); }  // 左端（5）から右へ書く
+    }
+    while n > 0 {                       // 残りの桁を空白にする
+        n -= 1;
+        if let Some(d) = Digit::check(n) { HP_DIGIT[d] = BLANK; }
+    }
+}
+
+pub fn show_bcd8(p: Pair, v: bcd8) {    // BCD の 2 桁を表示する（BCD のバイトを 16 進で出すと、そのまま 10 進の数字になる）
+    let b: u8 = 0;
+    for d in v.digits() { b = (b << 4) | d; }   // 上の桁から 4 ビットずつ詰めて、BCD のバイトに戻す
+    HP_HEX[p] = b;
+}
+
+pub fn show_bcd16(v: bcd16) {           // BCD の 4 桁を左の 4 桁に表示する
+    let hi: u8 = 0;                     // 左の 2 桁になるバイト
+    let lo: u8 = 0;                     // 中の 2 桁になるバイト
+    for d in v.digits() {               // 上の桁から 1 桁ずつ
+        hi = (hi << 4) | (lo >> 4);     // lo の上の桁を hi へ送る
+        lo = (lo << 4) | d;             // 新しい桁を lo の下の桁に入れる
+    }
+    HP_HEX[2] = hi;                     // 計算が終わってから、結果だけを表示レジスタに書く
+    HP_HEX[1] = lo;
+}
+
+pub fn key() -> Option<u8> {            // 新しく押されたキーがあれば Some(キーコード)。待たない
+    let k = HP_KEY;                     // 1 回だけ読む（読むとビット7 が消える）
+    if k & $80 != 0 { Some(k & $1F) } else { None }
+}
+
+pub fn set_level(l: Level) {            // 明るさを変える（RST は有効のまま、表示 ON）
+    HP_CTRL = $88 | l as u8;
+}
+
+pub fn display_on(on: bool) {           // 表示をつける・消す（表示の中身はそのまま残る）
+    if on { HP_CTRL = $8A; } else { HP_CTRL = $82; }    // 明るさはモニタと同じ 2。ビット7（RST）は必ず 1 にする
+}

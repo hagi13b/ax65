@@ -1,0 +1,60 @@
+// src/functions.ax65 — 関数：引数と戻り値、構造体で複数の値を返す、const fn、関数の中の static
+use console;                            // 1 文字の出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+use core::mul8;                         // 掛け算
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+struct MinMax { min: u8, max: u8 }      // 2 つの値をまとめて返すための構造体
+
+fn min_max(a: u8, b: u8, c: u8) -> MinMax {     // 引数 3 つは A・X・Y で渡される
+    let lo = a;
+    let hi = a;
+    if b < lo { lo = b; }
+    if c < lo { lo = c; }
+    if b > hi { hi = b; }
+    if c > hi { hi = c; }
+    MinMax { min: lo, max: hi }         // 最後の式が戻り値（結果領域に置かれる）
+}
+
+const fn clamp(v: u8, lo: u8, hi: u8) -> u8 {   // コンパイル時にも実行時にも呼べる関数
+    if v < lo { lo } else if v > hi { hi } else { v }
+}
+
+const LIMIT: u8 = clamp(250, 10, 200);  // コンパイル時に計算されて 200 になる
+
+fn area(w: u8, h: u8) -> u16 {          // 戻り値が u16（A と X で返る）
+    mul8(w, h)
+}
+
+fn halve_until_small(n: u8) -> u8 {     // 引数は関数の中で書き換えられる（呼び出し元は変わらない）
+    while n > 10 { n = n >> 1; }
+    n
+}
+
+fn count_calls() -> u8 {                // 呼ばれた回数を数える
+    static N: u8 = 0;                   // 関数の中の static：呼び出しをまたいで値が残る
+    N += 1;
+    N
+}
+
+#[inline]
+fn twice(x: u8) -> u8 { x << 1 }        // 小さな関数は展開してよいと伝える
+
+fn main() {
+    let m = min_max(42, 7, 99);         // 結果は min_max の結果領域にある
+    print(p"MIN = "); print_u8(m.min); newline();
+    print(p"MAX = "); print_u8(m.max); newline();
+
+    print(p"LIMIT = "); print_u8(LIMIT); newline();
+    print(p"CLAMP(5) = "); print_u8(clamp(5, 10, 200)); newline();   // 実行時に呼ぶ
+    print(p"AREA 12*20 LOW BYTE = "); print_u8(area(12, 20) as u8); newline();  // 240
+    print(p"HALVE 200 = "); print_u8(halve_until_small(200)); newline();       // 6
+    print(p"TWICE 21 = "); print_u8(twice(21)); newline();
+
+    count_calls();                      // 戻り値を使わなくてもよい（u8 なので警告は出ない）
+    count_calls();
+    print(p"CALLS = "); print_u8(count_calls()); newline();         // 3
+}

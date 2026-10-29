@@ -1,0 +1,172 @@
+// src/meteor.ax65 — AX65 サンプル：隕石よけゲーム（AX65 仕様書 1.1）
+//
+// 想定するターゲット：
+//   v2 … 実機（6502-CPLD ボード＋HEXPAD）。スコアをシリアル端末（19200bps）に表示する
+//   v3 … v2 に画面を足した仮の構成。隕石とプレイヤーを画面に描く
+// どちらのターゲットも割り込みがなく（irq = none）、main が終わったら rts でモニタへ戻る（exit = rts）。
+// フレームの時間は GPIO のタイマー T2 で計る（hw/frame_timer.ax65）。ターゲット定義は targets/ を参照。
+// console の実装は hw/acia_console.ax65、screen の実装は hw/v3_screen.ax65（v3 だけ）。
+//
+// 操作：HEXPAD の 4 で左、6 で右、A/D で終了
+
+use console::putc;                      // 1文字の出力（実装はターゲットの bind で決まる）
+use screen;                             // 画面（bind されていないターゲットもある）
+use hw::hexpad;                         // HEXPAD のキー
+use hw::frame_timer;                    // 1/60 秒のフレーム
+
+// ---- 定数 ---------------------------------------------------------------
+
+const FIELD_W: u8 = 20;                 // 画面の幅（マス）
+const FIELD_H: u8 = 16;                 // 画面の高さ（マス）
+const PLAYER_Y: u8 = FIELD_H - 1;       // プレイヤーは一番下の行にいる
+
+const TITLE: str = p"METEOR DODGE";     // 長さ付きの文字列（ASCII）
+
+// ---- 型 -----------------------------------------------------------------
+
+range Mid = 0..8;                       // 隕石の番号（0〜7）。終わりの 8 は含まない
+
+enum Key { Left, Right, Quit }          // 操作の種類
+
+struct Meteor { x: u8, y: u8, wait: u8 }   // wait：次に1マス落ちるまでのフレーム数
+
+// ---- 表（コンパイル時に計算する） --------------------------------------
+
+comptime fn spawn_x(i: int) -> u8 {     // 隕石が出てくる列（コンパイル時専用の関数）
+    ((i * 7 + 3) % 20) as u8            // int の計算なので、% も自由に使える
+}
+
+const SPAWN_X: [u8; Mid] = [for i in 0..8 => spawn_x(i)];   // 8個の出現位置の表
+
+// ---- 変数 ---------------------------------------------------------------
+
+static METEORS: [Meteor; Mid] = [Meteor { x: 0, y: 0, wait: 0 }; Mid];  // フィールドごとの配列になる
+static PLAYER_X: u8 = FIELD_W / 2;  // プレイヤーの列
+static SCORE: bcd16 = 0;            // スコア（10進4桁）
+static SEED: u8 = $5A;              // 乱数の種（0 以外）
+
+// ---- 乱数 ---------------------------------------------------------------
+
+asm fn rand_step(r: u8) -> u8 {         // 8ビットの疑似乱数（ガロア型 LFSR）。r は A で届き、A で返す
+    asl a                   ; A を左に1ビットずらす（はみ出たビットはキャリーへ）
+    bcc done                ; はみ出たビットが 0 なら、そのまま done へ飛ぶ
+    eor #$1D                ; 1 なら、決まった値と XOR を取る（周期が最大の255になる定数）
+done:                       ; 合流地点
+    rts                     ; A を戻り値として返す
+}
+
+fn rand() -> u8 {
+    SEED = rand_step(SEED);
+    SEED                                // 最後の式が戻り値になる（return を省略）
+}
+
+// ---- 入力 ---------------------------------------------------------------
+
+fn read_key() -> Option<Key> {
+    let k = hexpad::poll_key()?;        // キーが押されていなければ、この関数も None を返して抜ける
+    match k {
+        $04 => Some(Key::Left),         // 4 のキー
+        $06 => Some(Key::Right),        // 6 のキー
+        $12 => Some(Key::Quit),         // A/D のキー
+        _   => None,                    // u8 は値が多いので、_ が必須
+    }
+}
+
+fn move_player(k: Key) {
+    match k {                           // Key の値をすべて書かないとエラーになる
+        Key::Left  => { PLAYER_X = PLAYER_X.saturating_sub(1); }   // 0 より左には行かない
+        Key::Right => { if PLAYER_X < FIELD_W - 1 { PLAYER_X += 1; } }
+        Key::Quit  => {}
+    }
+}
+
+// ---- 隕石 ---------------------------------------------------------------
+
+fn clear_meteors() {
+    #[reg(x)]                           // ループの番号を X に置く（中で関数を呼ばないので置ける）
+    for m in Mid {                      // m は Mid 型なので、METEORS[m] に範囲の検査は要らない
+        METEORS[m].y = 0;
+        METEORS[m].wait = m as u8;      // すぐ後の respawn で上書きされる（-O2 はこの書き込みを消す。19.3節）
+    }
+}
+
+fn respawn(m: Mid) {                    // 隕石を一番上の行に出し直す
+    let r = rand();
+    METEORS[m].x = SPAWN_X[Mid::wrap(r)];   // 下位3ビットだけを取って、必ず 0〜7 にする（and 1命令）
+    METEORS[m].y = 0;
+    METEORS[m].wait = r & 3;
+}
+
+fn update_meteors() -> bool {           // 隕石を動かし、プレイヤーに当たったら true を返す
+    let hit = false;
+    for m in Mid {
+        if METEORS[m].wait > 0 {
+            METEORS[m].wait -= 1;
+            continue;
+        }
+        METEORS[m].wait = 3;
+        METEORS[m].y += 1;
+        if METEORS[m].y == FIELD_H {    // 下まで落ちきったら、上から出直す
+            respawn(m);
+            SCORE += 1;                 // BCD の足し算（sed と cld はコンパイラが入れる）
+        } else if METEORS[m].y == PLAYER_Y && METEORS[m].x == PLAYER_X {
+            hit = true;
+        }
+    }
+    hit
+}
+
+// ---- 表示 ---------------------------------------------------------------
+
+fn print(s: str) {                      // 長さ付きの文字列を出力する
+    for c in s { putc(c); }
+}
+
+fn print_score() {
+    for d in SCORE.digits() {           // 上の桁から1桁ずつ（0〜9）取り出す
+        putc(('0' as u8 + d) as char);
+    }
+}
+
+fn draw() {
+    comptime if target.has(screen) {    // 画面が bind されているターゲットだけ
+        screen::clear();
+        for x in (0..FIELD_W).rev() {   // 逆順のループ（dex と bpl で回るので少し速い）
+            screen::put(x, FIELD_H, '-'@screen);    // 床を描く（画面用の文字コードに変換済み）
+        }
+        for m in Mid {
+            screen::put(METEORS[m].x, METEORS[m].y, '*'@screen);
+        }
+        screen::put(PLAYER_X, PLAYER_Y, 'A'@screen);
+    } else {                            // 画面がないターゲット：スコアだけを端末に上書き表示する
+        putc('\r');
+        print(p"SCORE ");
+        print_score();
+    }
+}
+
+// ---- メイン -------------------------------------------------------------
+
+fn main() {
+    print(TITLE);
+    putc('\r');
+
+    clear_meteors();
+    for m in Mid { respawn(m); }
+
+    frame_timer::start();               // 最初のフレームの時間を計り始める
+    'game: loop {
+        frame_timer::wait();            // 前のフレームの始まりから 1/60 秒たつまで待つ
+        frame_timer::start();           // 次のフレームの時間を計り始める
+        if let Some(k) = read_key() {
+            if k == Key::Quit { break 'game; }
+            move_player(k);
+        }
+        if update_meteors() { break 'game; }
+        draw();
+    }
+
+    print(p"\rGAME OVER  SCORE ");
+    print_score();
+    putc('\r');
+}                                       // main が終わると rts でモニタへ戻る（ターゲット定義の exit = rts）

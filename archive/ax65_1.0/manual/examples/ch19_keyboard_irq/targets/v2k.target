@@ -1,0 +1,4 @@
+// targets/v2k.target — v2 のキーボードを、割り込みで読む実装に差し替えた構成
+target v2k extends v2 {
+    bind keyboard = hw::via_keyboard_irq;   // 同じ名前の bind は置き換え
+}

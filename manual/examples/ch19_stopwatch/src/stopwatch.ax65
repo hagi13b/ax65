@@ -1,0 +1,57 @@
+// src/stopwatch.ax65 — 時間を計る：タイマー T2 で 10 ミリ秒ずつ数えるストップウォッチ
+//   表示：左から 分（2 桁）・秒（2 桁）・1/100 秒（2 桁）
+//   INC：スタート／ストップ　0：止まっているときに 0 に戻す　A/D：終わる
+use hw::hexpad;                         // 7 セグメント LED とキー
+use hw::t2_timer;                       // タイマー T2（ワンショット）
+use hw::user_io;                        // ユーザー LED（1 秒ごとに点滅させる）
+use hw::user_io::Pa;                    // LED の名前
+
+static RUNNING: bool = false;           // 動いているか
+static CS: bcd8 = 0;                    // 1/100 秒（10 進 2 桁）
+static SEC: bcd8 = 0;                   // 秒
+static MIN: bcd8 = 0;                   // 分
+
+fn show_time() {                        // 3 つの BCD を、2 桁ずつの表示に出す
+    hexpad::show_bcd8(2, MIN);
+    hexpad::show_bcd8(1, SEC);
+    hexpad::show_bcd8(0, CS);
+}
+
+fn tick() {                             // 10 ミリ秒進める
+    if CS < 99 { CS += 1; return; }     // BCD のまま 10 進で数える（sed・cld はコンパイラが入れる）
+    CS = 0;
+    user_io::led_toggle(Pa::D0);        // 1 秒ごとに D0 を反転する
+    if SEC < 59 { SEC += 1; return; }
+    SEC = 0;
+    if MIN < 99 { MIN += 1; } else { MIN = 0; }
+}
+
+fn reset() {                            // 0 に戻す
+    CS = 0;
+    SEC = 0;
+    MIN = 0;
+    show_time();
+}
+
+fn main() {
+    show_time();
+    t2_timer::start(t2_timer::PER_10MS);    // 最初の 10 ミリ秒を数え始める
+    loop {
+        t2_timer::wait();               // 前に start してから 10 ミリ秒たつまで待つ
+        t2_timer::start(t2_timer::PER_10MS);    // すぐ次の 10 ミリ秒を数え始める
+        if RUNNING {
+            tick();
+            show_time();
+        }
+        if let Some(k) = hexpad::key() {    // 待たずにキーを調べる
+            if k == hexpad::KEY_INC {
+                RUNNING = !RUNNING;     // スタートとストップを切り替える
+            } else if k == 0 && !RUNNING {
+                reset();                // 0 のキー：止まっているときだけ 0 に戻す
+            } else if k == hexpad::KEY_AD {
+                break;                  // A/D：終わる
+            }
+        }
+    }
+    user_io::leds(0);                   // LED を消して終わる
+}

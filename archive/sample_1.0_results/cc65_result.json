@@ -1,0 +1,257 @@
+{
+ "meteor_O": {
+  "file_bytes": 1108,
+  "segments": {
+   "ZEROPAGE": 26,
+   "STARTUP": 51,
+   "CODE": 1015,
+   "RODATA": 40,
+   "DATA": 2,
+   "BSS": 28
+  },
+  "same_as_ax65": [
+   true,
+   true,
+   true
+  ],
+  "ideal": {
+   "frames": 600,
+   "startup": 6351,
+   "irq_avg": 38.0,
+   "input": [
+    74,
+    75.6,
+    199
+   ],
+   "update": [
+    726,
+    866.7,
+    2131
+   ],
+   "draw": [
+    1865,
+    1865,
+    1865
+   ],
+   "frame": [
+    2665,
+    2807.2,
+    4070
+   ]
+  },
+  "serial": {
+   "frames": 600,
+   "startup": 16620,
+   "frame": [
+    11485,
+    11627.2,
+    12890
+   ]
+  },
+  "hit_frames": 57
+ },
+ "meteor_O0": {
+  "file_bytes": 1881,
+  "segments": {
+   "ZEROPAGE": 26,
+   "STARTUP": 51,
+   "CODE": 1788,
+   "RODATA": 40,
+   "DATA": 2,
+   "BSS": 28
+  },
+  "same_as_ax65": [
+   true,
+   true,
+   true
+  ],
+  "ideal": {
+   "frames": 600,
+   "startup": 13511,
+   "irq_avg": 38.0,
+   "input": [
+    141,
+    144.3,
+    409
+   ],
+   "update": [
+    1503,
+    2202.7,
+    5504
+   ],
+   "draw": [
+    2699,
+    2699,
+    2699
+   ],
+   "frame": [
+    4343,
+    5046.0,
+    8344
+   ]
+  },
+  "serial": {
+   "frames": 600,
+   "startup": 23316,
+   "frame": [
+    12779,
+    13481.9,
+    16743
+   ]
+  },
+  "hit_frames": 57
+ },
+ "meteor_Oirs": {
+  "file_bytes": 1090,
+  "segments": {
+   "ZEROPAGE": 26,
+   "STARTUP": 51,
+   "CODE": 997,
+   "RODATA": 40,
+   "DATA": 2,
+   "BSS": 28
+  },
+  "same_as_ax65": [
+   true,
+   true,
+   true
+  ],
+  "ideal": {
+   "frames": 600,
+   "startup": 5928,
+   "irq_avg": 38.0,
+   "input": [
+    74,
+    75.6,
+    199
+   ],
+   "update": [
+    726,
+    866.7,
+    2131
+   ],
+   "draw": [
+    1565,
+    1565,
+    1565
+   ],
+   "frame": [
+    2365,
+    2507.2,
+    3770
+   ]
+  },
+  "serial": {
+   "frames": 600,
+   "startup": 16512,
+   "frame": [
+    11446,
+    11588.2,
+    12851
+   ]
+  },
+  "hit_frames": 57
+ },
+ "meteor_Oirs_Cl": {
+  "file_bytes": 982,
+  "segments": {
+   "ZEROPAGE": 26,
+   "STARTUP": 51,
+   "CODE": 889,
+   "RODATA": 40,
+   "DATA": 2,
+   "BSS": 42
+  },
+  "same_as_ax65": [
+   true,
+   true,
+   true
+  ],
+  "ideal": {
+   "frames": 600,
+   "startup": 5166,
+   "irq_avg": 38.0,
+   "input": [
+    37,
+    38.5,
+    158
+   ],
+   "update": [
+    559,
+    659.3,
+    1600
+   ],
+   "draw": [
+    1565,
+    1565,
+    1565
+   ],
+   "frame": [
+    2161,
+    2262.8,
+    3202
+   ]
+  },
+  "serial": {
+   "frames": 600,
+   "startup": 15750,
+   "frame": [
+    11242,
+    11343.8,
+    12283
+   ]
+  },
+  "hit_frames": 57
+ },
+ "meteor_Oirs_Cl_cs": {
+  "file_bytes": 973,
+  "segments": {
+   "ZEROPAGE": 26,
+   "STARTUP": 51,
+   "CODE": 880,
+   "RODATA": 40,
+   "DATA": 2,
+   "BSS": 42
+  },
+  "same_as_ax65": [
+   true,
+   true,
+   true
+  ],
+  "ideal": {
+   "frames": 600,
+   "startup": 4854,
+   "irq_avg": 38.0,
+   "input": [
+    36,
+    37.5,
+    158
+   ],
+   "update": [
+    559,
+    659.3,
+    1600
+   ],
+   "draw": [
+    1409,
+    1409,
+    1409
+   ],
+   "frame": [
+    2004,
+    2105.8,
+    3045
+   ]
+  },
+  "serial": {
+   "frames": 600,
+   "startup": 15762,
+   "frame": [
+    11247,
+    11348.8,
+    12288
+   ]
+  },
+  "hit_frames": 57
+ }
+}

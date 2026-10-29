@@ -1,0 +1,5 @@
+// <ax65>/std/mul_shift.ax65 — mul の標準の実装（シフトと足し算）
+impl mul {
+    fn mul8(a: u8, b: u8) -> u16 { core::mul8(a, b) }
+    fn mul16(a: u16, b: u16) -> u32 { core::mul16(a, b) }
+}

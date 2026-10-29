@@ -1,0 +1,52 @@
+// src/screen_typewriter.ax65 — 文字画面：PC の端末で打った文字を v3 の画面に書く
+//   ターゲット：v3（仮の構成）。ESC で終わる
+use console;                            // シリアル端末（打った文字が届く）
+use screen;                             // 文字画面（v3 だけ）
+
+comptime assert(target.has(screen), "このプログラムは画面のあるターゲット（v3）用です");
+
+const TOP: u8 = 2;                      // 文字を書き始める行
+static CX: u8 = 0;                      // カーソルの列
+static CY: u8 = TOP;                    // カーソルの行
+
+fn put_str(x: u8, y: u8, s: str@screen) {   // 画面用の文字列を (x, y) から横に書く
+    for c in s {
+        screen::put(x, y, c);
+        x += 1;                         // 引数は関数の中で書き換えてよい
+    }
+}
+
+fn to_screen(c: char) -> Option<char@screen> {  // 打った ASCII の文字を、実行時に画面の文字コードにする
+    if c >= ' ' && c <= '~' {           // 画面に出せるのは空白〜~
+        Some(c as u8 as char@screen)    // v3 の変換表では、文字コードがそのまま画面の値になる
+    } else {
+        None                            // 出せない文字
+    }
+}
+
+fn new_line() {                         // 次の行の先頭へ。下まで来たら上に戻る
+    CX = 0;
+    CY += 1;
+    if CY >= screen::HEIGHT { CY = TOP; }
+}
+
+fn main() {
+    screen::clear();
+    put_str(0, 0, p"V3 TYPEWRITER  (ESC TO QUIT)"@screen);  // 変換表はコンパイル時に使われる
+    for x in 0..screen::WIDTH { screen::put(x, 1, '-'@screen); }    // 区切りの線
+    loop {
+        screen::put(CX, CY, '_'@screen);        // カーソル
+        if let Some(c) = console::poll() {      // 端末から文字が届いていれば
+            if c == '\x1B' { break; }
+            screen::put(CX, CY, ' '@screen);    // カーソルを消す
+            if c == '\r' {
+                new_line();
+            } else if let Some(s) = to_screen(c) {
+                screen::put(CX, CY, s);
+                CX += 1;
+                if CX >= screen::WIDTH { new_line(); }
+            }
+        }
+    }
+    screen::clear();
+}

@@ -1,0 +1,25 @@
+// hw/leds.ax65 — VIA1（$6000）のポートB につないだ 8 個の LED（PB0〜PB7。1 で点灯）
+//   VIA1 のうち、このモジュールが持つのはポートB の 2 つのレジスタだけ。
+//   タイマー関係のレジスタは hw/via1_timer.ax65 が持つ（アドレスが重ならないので分けられる）。
+
+pub flags Led { L0, L1, L2, L3, L4, L5, L6, L7 }   // LED の名前（ビット0〜7）
+
+io(rmw) ORB:  Led @ $6000;              // ポートB の出力（読み直しても安全なので RMW 命令を許す）
+io(out) DDRB: u8  @ $6002;              // ポートB の向き（1 = 出力）
+
+init {
+    ORB  = $00 as Led;                  // はじめは全部消す
+    DDRB = $FF;                         // 8 本とも出力にする
+}
+
+pub fn show(v: u8) {                    // 8 ビットの値をそのまま LED に出す
+    ORB = v as Led;
+}
+
+pub fn on(l: Led) {                     // 指定した LED をつける（tsb 命令になる）
+    ORB.insert(l);
+}
+
+pub fn off(l: Led) {                    // 指定した LED を消す（trb 命令になる）
+    ORB.remove(l);
+}

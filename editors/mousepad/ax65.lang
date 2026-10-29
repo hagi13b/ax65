@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AX65 1.1 for GtkSourceView 4/5 (Mousepad, gedit など) -->
+<language id="ax65" name="AX65" version="2.0" _section="Source">
+  <metadata>
+    <property name="mimetypes">text/x-ax65</property>
+    <property name="globs">*.ax65;*.target;ax65.proj</property>
+    <property name="line-comment-start">//</property>
+    <property name="block-comment-start">/*</property>
+    <property name="block-comment-end">*/</property>
+  </metadata>
+  <styles>
+    <style id="comment" name="Comment" map-to="def:comment"/>
+    <style id="string" name="String" map-to="def:string"/>
+    <style id="char" name="Character" map-to="def:character"/>
+    <style id="escape" name="Escape" map-to="def:special-char"/>
+    <style id="encoding" name="Encoding" map-to="def:special-constant"/>
+    <style id="keyword" name="Keyword" map-to="def:keyword"/>
+    <style id="reserved" name="Reserved" map-to="def:error"/>
+    <style id="type" name="Type" map-to="def:type"/>
+    <style id="constant" name="Constant" map-to="def:special-constant"/>
+    <style id="builtin" name="Builtin" map-to="def:builtin"/>
+    <style id="number" name="Number" map-to="def:decimal"/>
+    <style id="attribute" name="Attribute" map-to="def:preprocessor"/>
+    <style id="label" name="Label" map-to="def:identifier"/>
+    <style id="mnemonic" name="Mnemonic" map-to="def:statement"/>
+  </styles>
+  <definitions>
+    <context id="line-comment" style-ref="comment" end-at-line-end="true">
+      <start>//</start>
+      <include><context ref="def:in-comment"/></include>
+    </context>
+    <context id="block-comment" style-ref="comment">
+      <start>/\*</start><end>\*/</end>
+      <include><context ref="def:in-comment"/></include>
+    </context>
+    <context id="escape" style-ref="escape">
+      <match>\\(x[0-9A-Fa-f]{2}|[nrt0\\'"])</match>
+    </context>
+    <context id="string" style-ref="string" end-at-line-end="true">
+      <start>\b(p|z|hi)?"</start>
+      <end>"(@[A-Za-z_][A-Za-z0-9_]*)?</end>
+      <include>
+        <context sub-pattern="1" where="end" style-ref="encoding"/>
+        <context ref="escape"/>
+      </include>
+    </context>
+    <context id="char" style-ref="char">
+      <match>'(\\(x[0-9A-Fa-f]{2}|.)|[^'\\])'(@[A-Za-z_][A-Za-z0-9_]*)?</match>
+    </context>
+    <context id="label" style-ref="label">
+      <match>'[A-Za-z_][A-Za-z0-9_]*\b(?!')</match>
+    </context>
+    <context id="number" style-ref="number">
+      <match>\$[0-9A-Fa-f_]+|\b0x[0-9A-Fa-f_]+\b|\b0b[01_]+\b|\b[0-9][0-9_]*(\.[0-9]+)?\b</match>
+    </context>
+    <context id="attribute" style-ref="attribute">
+      <start>\#\[</start><end>\]</end>
+      <include><context ref="string"/><context ref="number"/></include>
+    </context>
+    <context id="keyword" style-ref="keyword">
+      <keyword>if</keyword>
+      <keyword>else</keyword>
+      <keyword>match</keyword>
+      <keyword>loop</keyword>
+      <keyword>while</keyword>
+      <keyword>for</keyword>
+      <keyword>in</keyword>
+      <keyword>break</keyword>
+      <keyword>continue</keyword>
+      <keyword>return</keyword>
+      <keyword>as</keyword>
+      <keyword>const</keyword>
+      <keyword>enum</keyword>
+      <keyword>extern</keyword>
+      <keyword>fn</keyword>
+      <keyword>impl</keyword>
+      <keyword>let</keyword>
+      <keyword>pub</keyword>
+      <keyword>static</keyword>
+      <keyword>struct</keyword>
+      <keyword>type</keyword>
+      <keyword>unsafe</keyword>
+      <keyword>use</keyword>
+      <keyword>range</keyword>
+      <keyword>flags</keyword>
+      <keyword>fnset</keyword>
+      <keyword>interface</keyword>
+      <keyword>io</keyword>
+      <keyword>shared</keyword>
+      <keyword>init</keyword>
+      <keyword>comptime</keyword>
+      <keyword>asm</keyword>
+      <keyword>atomic</keyword>
+      <keyword>cycles</keyword>
+      <keyword>io_span</keyword>
+      <keyword>max_cycles</keyword>
+      <keyword>target</keyword>
+      <keyword>extends</keyword>
+      <keyword>region</keyword>
+      <keyword>reserve</keyword>
+      <keyword>place</keyword>
+      <keyword>encoding</keyword>
+      <keyword>bind</keyword>
+      <keyword>project</keyword>
+      <keyword>never</keyword>
+      <keyword>halt</keyword>
+    </context>
+    <context id="reserved" style-ref="reserved">
+      <keyword>mut</keyword>
+    </context>
+    <context id="type" style-ref="type">
+      <keyword>u8</keyword>
+      <keyword>i8</keyword>
+      <keyword>u16</keyword>
+      <keyword>i16</keyword>
+      <keyword>u24</keyword>
+      <keyword>i24</keyword>
+      <keyword>u32</keyword>
+      <keyword>i32</keyword>
+      <keyword>bool</keyword>
+      <keyword>char</keyword>
+      <keyword>str</keyword>
+      <keyword>zstr</keyword>
+      <keyword>histr</keyword>
+      <keyword>bcd8</keyword>
+      <keyword>bcd16</keyword>
+      <keyword>bcd32</keyword>
+      <keyword>ptr</keyword>
+      <keyword>strbuf</keyword>
+      <keyword>int</keyword>
+      <keyword>real</keyword>
+      <keyword>Option</keyword>
+    </context>
+    <context id="constant" style-ref="constant">
+      <keyword>true</keyword>
+      <keyword>false</keyword>
+      <keyword>Some</keyword>
+      <keyword>None</keyword>
+    </context>
+    <context id="builtin" style-ref="builtin">
+      <keyword>irq_enable</keyword>
+      <keyword>irq_disable</keyword>
+      <keyword>wait_interrupt</keyword>
+      <keyword>delay</keyword>
+      <keyword>size_of</keyword>
+      <keyword>include_bin</keyword>
+      <keyword>target</keyword>
+      <keyword>build</keyword>
+      <keyword>Cpu</keyword>
+      <keyword>sin</keyword>
+      <keyword>cos</keyword>
+      <keyword>sqrt</keyword>
+      <keyword>round</keyword>
+      <keyword>floor</keyword>
+      <keyword>abs</keyword>
+      <keyword>PI</keyword>
+      <keyword>core</keyword>
+    </context>
+    <context id="const-name" style-ref="constant">
+      <match>\b[A-Z][A-Z0-9_]+\b</match>
+    </context>
+    <context id="user-type" style-ref="type">
+      <match>\b[A-Z][a-z0-9][A-Za-z0-9_]*\b</match>
+    </context>
+    <context id="asm-block">
+      <start>\basm\b[^{\n]*\{\s*$</start>
+      <end>^\s*\}</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="keyword"/>
+        <context id="asm-comment" style-ref="comment" end-at-line-end="true"><start>;</start></context>
+        <context id="asm-ref" style-ref="builtin"><match>\{[A-Za-z_][A-Za-z0-9_.:]*\}</match></context>
+        <context id="asm-label" style-ref="label"><match>^\s*[@A-Za-z_][A-Za-z0-9_]*:</match></context>
+        <context id="mnemonic" style-ref="mnemonic">
+          <match>(?i)\b(adc|and|asl|bbr0|bbr1|bbr2|bbr3|bbr4|bbr5|bbr6|bbr7|bbs0|bbs1|bbs2|bbs3|bbs4|bbs5|bbs6|bbs7|bcc|bcs|beq|bit|bmi|bne|bpl|bra|brk|bvc|bvs|clc|cld|cli|clv|cmp|cpx|cpy|dec|dex|dey|eor|inc|inx|iny|jmp|jsr|lda|ldx|ldy|lsr|nop|ora|pha|php|phx|phy|pla|plp|plx|ply|rmb0|rmb1|rmb2|rmb3|rmb4|rmb5|rmb6|rmb7|rol|ror|rti|rts|sbc|sec|sed|sei|smb0|smb1|smb2|smb3|smb4|smb5|smb6|smb7|sta|stp|stx|sty|stz|tax|tay|trb|tsb|tsx|txa|txs|tya|wai|smc)\b</match>
+        </context>
+        <context ref="number"/>
+      </include>
+    </context>
+    <context id="ax65" class="no-spell-check">
+      <include>
+        <context ref="line-comment"/>
+        <context ref="block-comment"/>
+        <context ref="asm-block"/>
+        <context ref="attribute"/>
+        <context ref="string"/>
+        <context ref="char"/>
+        <context ref="label"/>
+        <context ref="number"/>
+        <context ref="reserved"/>
+        <context ref="keyword"/>
+        <context ref="type"/>
+        <context ref="constant"/>
+        <context ref="builtin"/>
+        <context ref="const-name"/>
+        <context ref="user-type"/>
+      </include>
+    </context>
+  </definitions>
+</language>

@@ -1,0 +1,323 @@
+// src/star_catch.ax65 — 総仕上げ：STAR CATCH（落ちてくる星をかごで受けるゲーム）
+//   ターゲット：v2（実機）。v2x（仮の構成）でも動き、そのときは効果音が鳴る。
+//   場は PC の端末に描き（ANSI のエスケープシーケンス）、得点は 7 セグメント LED、残りはユーザー LED に出す。
+//   操作：HEXPAD の 4 か端末の A・J で左、6 か D・L で右、5 かスペースで開始、A/D か Q で終了
+use console;                            // シリアル端末（メインだけで使う）
+use keyboard;                           // v2 では HEXPAD のキー、v2x では ASCII キーボード
+use hw::hexpad;                         // 7 セグメント LED（得点）
+use hw::user_io;                        // ユーザー LED（残り）
+use hw::t2_timer;                       // フレームの時間（タイマー T2）
+use lib::ansi;                          // 端末の画面の操作
+use core::divmod8;                      // 割り算の余り
+#[allow(unused_imports)]                // 音のないターゲット（v2）では使わない
+use sound;
+#[allow(unused_imports)]                // 同じ（効果音の表の計算に使う）
+use lib::notes;
+
+// ---- 場の配置 -----------------------------------------------------------
+
+const LEFT: u8 = 1;                     // 場の左端の列（端末の 0 列目は枠）
+const WIDTH: u8 = 20;                   // 場の幅（星とかごが動ける列の数）
+const TOP: u8 = 2;                      // 星が現れる行
+const PLAYER_ROW: u8 = 17;              // かごの行
+const FLOOR_ROW: u8 = 18;               // 床の行（ここまで落ちたら取りそこね）
+const BASKET_W: u8 = 3;                 // かごの幅
+const MAX_X: u8 = WIDTH - BASKET_W;     // かごの左端の最大値（17）
+const FRAME: u16 = (target.clock / 30) as u16;  // 1 フレーム（1/30 秒）の T2 のカウント数（v2 では 61416）
+
+// ---- 型 -----------------------------------------------------------------
+
+range Sid = 0..4;                       // 星の番号（同時に 4 個まで）
+struct Star { x: u8, y: u8, wait: u8, active: bool }
+enum Key { Left, Right, Start, Quit }   // 操作
+enum Sfx { Silent, Start, Coin, Crash } // 効果音の種類
+
+// ---- 変数 ---------------------------------------------------------------
+
+static STARS: [Star; Sid] = [Star { x: 0, y: 0, wait: 0, active: false }; Sid];
+static PLAYER_X: u8 = 8;                // かごの左端の列（場の中の位置）
+static SCORE: bcd16 = 0;                // 得点（10 進 4 桁）
+static HI: bcd16 = 0;                   // 最高得点
+static LIVES: u8 = 3;                   // 残りの数
+static SPEED: u8 = 6;                   // 星が 1 行落ちるまでのフレーム数（小さいほど速い）
+static CAUGHT: u8 = 0;                  // 受け取った数（速さを上げるのに使う）
+static SPAWN_WAIT: u8 = 15;             // 次の星を出すまでのフレーム数
+static SEED: u8 = $5A;                  // 乱数の種
+
+// ---- 効果音（音のあるターゲットだけ） -----------------------------------
+
+range Fx = 0..8;                        // 効果音の 8 ステップ（1 ステップ = 1 フレーム）
+
+comptime if target.has(sound) {
+    comptime fn start_hz(i: int) -> real {  // ド・ミ・ソ・ド（2 ステップずつ）
+        match i / 2 {
+            0 => notes::note_hz(24),    // C5
+            1 => notes::note_hz(28),    // E5
+            2 => notes::note_hz(31),    // G5
+            _ => notes::note_hz(36),    // C6
+        }
+    }
+    comptime fn coin_hz(i: int) -> real { if i < 3 { 987.767 } else { 1318.51 } }   // B5 → E6
+    comptime fn crash_hz(i: int) -> real { 320.0 - i as real * 30.0 }               // 下がっていく音
+
+    const START_TONES: [u16; Fx] = [for i in 0..8 => notes::period_of(start_hz(i))];
+    const COIN_TONES:  [u16; Fx] = [for i in 0..8 => notes::period_of(coin_hz(i))];
+    const CRASH_TONES: [u16; Fx] = [for i in 0..8 => notes::period_of(crash_hz(i))];
+
+    static KIND: Sfx = Sfx::Silent;     // 鳴らしている効果音
+    static POS: u8 = 0;                 // 何ステップ目か
+
+    fn sfx(s: Sfx) {                    // 効果音を最初から鳴らす
+        KIND = s;
+        POS = 0;
+    }
+
+    fn sfx_step() {                     // 1 フレームに 1 回呼び、音の高さを 1 ステップ進める
+        if KIND == Sfx::Silent { return; }
+        if let Some(i) = Fx::check(POS) {
+            match KIND {
+                Sfx::Start  => sound::tone(START_TONES[i]),
+                Sfx::Coin   => sound::tone(COIN_TONES[i]),
+                Sfx::Crash  => sound::tone(CRASH_TONES[i]),
+                Sfx::Silent => {}
+            }
+            POS += 1;
+        } else {                        // 8 ステップ鳴らし終えた
+            sound::off();
+            KIND = Sfx::Silent;
+        }
+    }
+
+    fn sfx_stop() {                     // 音を止める
+        sound::off();
+        KIND = Sfx::Silent;
+    }
+} else {                                // 音のないターゲット：何もしない関数にする
+    #[allow(unused_variables)]          // 引数を使わないが、警告を止める
+    fn sfx(s: Sfx) { }
+    fn sfx_step() { }
+    fn sfx_stop() { }
+}
+
+// ---- 乱数 ---------------------------------------------------------------
+
+asm fn rand_step(r: u8) -> u8 {         // 8 ビットの疑似乱数（ガロア型 LFSR）
+    asl a                   ; A を左に 1 ビットずらす（はみ出たビットはキャリーへ）
+    bcc done                ; はみ出たビットが 0 なら done へ飛ぶ
+    eor #$1D                ; 1 なら決まった値と XOR を取る
+done:                       ; 合流地点
+    rts                     ; A を戻り値として返す
+}
+
+fn rand() -> u8 {
+    SEED = rand_step(SEED);
+    SEED
+}
+
+// ---- 時間 ---------------------------------------------------------------
+
+fn wait_frame() {                       // 次のフレームまで待つ（T2 を毎回スタートし直す）
+    t2_timer::wait();                   // 前のフレームから 1/30 秒たつまで待つ
+    t2_timer::start(FRAME);             // 次のフレームを数え始める
+    sfx_step();                         // 効果音を 1 ステップ進める（音のないターゲットでは空）
+}
+
+fn wait_frames(n: u8) {                 // n フレーム待つ
+    while n > 0 { wait_frame(); n -= 1; }
+}
+
+// ---- 表示 ---------------------------------------------------------------
+
+fn print_bcd16(v: bcd16) {              // 端末に 4 桁を出す
+    for d in v.digits() { console::putc(('0' as u8 + d) as char); }
+}
+
+fn draw_score() {                       // 得点を 7 セグメント LED の左 4 桁に出す
+    hexpad::show_bcd16(SCORE);
+}
+
+fn draw_lives() {                       // 残りの数だけ、D0 から順に LED をつける
+    let v: u8 = 0;
+    let n = LIVES;
+    while n > 0 {                       // 1 → D0、2 → D0・D1、3 → D0〜D2
+        v = (v >> 1) | $08;
+        n -= 1;
+    }
+    user_io::leds(v);
+}
+
+fn draw_field() {                       // 枠と床を描く
+    ansi::clear();
+    for y in TOP..FLOOR_ROW {           // 左右の枠
+        ansi::put_at(0, y, '|');
+        ansi::put_at(LEFT + WIDTH, y, '|');
+    }
+    ansi::move_to(0, FLOOR_ROW);
+    let n = WIDTH + 2;                  // 床の長さ（両端の枠の分も含める）
+    while n > 0 { console::putc('='); n -= 1; }
+}
+
+fn draw_basket(show: bool) {            // かごを描く（show が false なら消す）
+    if show {
+        ansi::print_at(LEFT + PLAYER_X, PLAYER_ROW, p"[_]");
+    } else {
+        ansi::print_at(LEFT + PLAYER_X, PLAYER_ROW, p"   ");
+    }
+}
+
+// ---- 入力 ---------------------------------------------------------------
+
+fn read_char() -> Option<char> {        // keyboard（v2 では HEXPAD）か端末から 1 文字。待たない
+    if let Some(c) = keyboard::poll() { return Some(c); }
+    console::poll()
+}
+
+fn read_key() -> Option<Key> {
+    let c = read_char()?;               // どちらにもなければ None
+    match c {
+        '\x04' | 'A' | 'a' | 'J' | 'j' => Some(Key::Left),     // HEXPAD の 4、または A・J
+        '\x06' | 'D' | 'd' | 'L' | 'l' => Some(Key::Right),    // HEXPAD の 6、または D・L
+        '\x05' | ' '                   => Some(Key::Start),    // HEXPAD の 5、またはスペース
+        '\x12' | 'Q' | 'q'             => Some(Key::Quit),     // HEXPAD の A/D、または Q
+        _                              => None,
+    }
+}
+
+fn move_basket(k: Key) {
+    match k {
+        Key::Left  => {
+            if PLAYER_X > 0 { draw_basket(false); PLAYER_X -= 1; }
+        }
+        Key::Right => {
+            if PLAYER_X < MAX_X { draw_basket(false); PLAYER_X += 1; }
+        }
+        Key::Start => {}
+        Key::Quit  => {}
+    }
+}
+
+// ---- 星 -----------------------------------------------------------------
+
+fn spawn() {                            // 空いている星を 1 つ出す
+    for s in Sid {
+        if !STARS[s].active {
+            STARS[s].active = true;
+            STARS[s].x = divmod8(rand(), WIDTH).r;  // 0〜19（WIDTH は定数なので Nz8 として渡せる）
+            STARS[s].y = TOP;
+            STARS[s].wait = SPEED;
+            ansi::put_at(LEFT + STARS[s].x, TOP, '*');
+            return;
+        }
+    }
+}
+
+fn caught(x: u8) -> bool {              // かごの中に入ったか
+    x >= PLAYER_X && x < PLAYER_X + BASKET_W
+}
+
+fn update_stars() {                     // 星を落とし、受け取りと取りそこねを調べる
+    for s in Sid {
+        if !STARS[s].active { continue; }
+        if STARS[s].wait > 0 {
+            STARS[s].wait -= 1;
+            continue;
+        }
+        STARS[s].wait = SPEED;
+        ansi::put_at(LEFT + STARS[s].x, STARS[s].y, ' ');   // 今の位置を消す
+        STARS[s].y += 1;
+        if STARS[s].y == PLAYER_ROW && caught(STARS[s].x) {
+            STARS[s].active = false;    // 受け取った
+            SCORE += 1;
+            CAUGHT += 1;
+            if CAUGHT & 7 == 0 && SPEED > 2 { SPEED -= 1; }   // 8 個ごとに速くする
+            draw_score();
+            sfx(Sfx::Coin);
+        } else if STARS[s].y == FLOOR_ROW {
+            STARS[s].active = false;    // 取りそこねた
+            LIVES = LIVES.saturating_sub(1);    // 同じフレームで 2 個落としても 0 より下にしない
+            draw_lives();
+            sfx(Sfx::Crash);
+            ansi::put_at(LEFT + STARS[s].x, FLOOR_ROW, '=');    // 床を描き直す
+        } else {
+            ansi::put_at(LEFT + STARS[s].x, STARS[s].y, '*');   // 新しい位置に描く
+        }
+    }
+}
+
+// ---- ゲームの流れ -------------------------------------------------------
+
+fn reset_game() {
+    for s in Sid { STARS[s].active = false; }
+    PLAYER_X = 8;
+    SCORE = 0;
+    LIVES = 3;
+    SPEED = 6;
+    CAUGHT = 0;
+    SPAWN_WAIT = 15;
+}
+
+fn title() -> bool {                    // タイトル画面。開始なら true、終了なら false
+    ansi::clear();
+    ansi::print_at(6, 4, p"STAR CATCH");
+    ansi::print_at(2, 7, p"4 / A: LEFT    6 / D: RIGHT");
+    ansi::print_at(2, 9, p"5 / SPACE: START");
+    ansi::print_at(2, 11, p"A/D / Q: QUIT");
+    ansi::print_at(2, 14, p"HI SCORE ");
+    print_bcd16(HI);
+    hexpad::show_text(p"STAR");         // 7 セグメント LED に STAR（S は 5 の形）
+    user_io::leds(0);
+    loop {
+        wait_frame();
+        rand();                         // 待っている間も乱数を進める（毎回ちがう並びになる）
+        if let Some(k) = read_key() {
+            match k {
+                Key::Start => { return true; }
+                Key::Quit  => { return false; }
+                _          => {}
+            }
+        }
+    }
+}
+
+fn play() {                             // 1 回分のゲーム
+    reset_game();
+    draw_field();
+    hexpad::clear();
+    draw_score();
+    draw_lives();
+    sfx(Sfx::Start);
+    loop {
+        wait_frame();
+        if let Some(k) = read_key() {
+            if k == Key::Quit { return; }
+            move_basket(k);
+        }
+        if SPAWN_WAIT > 0 {
+            SPAWN_WAIT -= 1;
+        } else {
+            spawn();
+            SPAWN_WAIT = 10 + (rand() & 15);    // 10〜25 フレーム後に次の星
+        }
+        update_stars();
+        draw_basket(true);              // 星を消したときに欠けても、毎回描き直す
+        if LIVES == 0 { return; }
+    }
+}
+
+fn game_over() {
+    ansi::print_at(6, 9, p"GAME OVER");
+    if SCORE > HI { HI = SCORE; }       // BCD どうしの大小比較
+    wait_frames(60);                    // 2 秒
+}
+
+fn main() {
+    t2_timer::start(FRAME);             // 最初のフレームを数え始める
+    while title() {
+        play();
+        game_over();
+    }
+    sfx_stop();                         // 音のあるターゲットでは音を止める
+    ansi::restore();                    // 端末の画面を消し、カーソルを戻す
+    hexpad::clear();                    // 7 セグメント LED と
+    user_io::leds(0);                   // ユーザー LED を消して、モニタへ戻る
+}

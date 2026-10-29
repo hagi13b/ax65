@@ -1,0 +1,53 @@
+// src/variables.ax65 — 変数と型：let・static・const、u8 と i8 と u16、as による変換
+use console;                            // 1 文字の出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする（標準ライブラリ）
+use bcd;                                // BCD と整数の変換（u16 を表示するのに使う）
+
+const LIMIT: u8 = 5;                    // 定数：コンパイル時に値が決まり、使う場所に埋め込まれる
+static COUNT: u8 = 0;                   // static：プログラムの間ずっと残る変数（起動時に毎回 0 になる）
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+
+fn print_u8(n: u8) {                    // 0〜255 を 10 進で出す
+    let s = u8_to_dec(n);               // s は strbuf<3>（最大 3 文字の文字列）
+    print(s.as_str());                  // str として渡す
+}
+
+fn print_u16(n: u16) {                  // 0〜65535 を 10 進で出す（先頭の 0 は出さない）
+    let b = bcd::from_u16(n);           // 整数を BCD（10 進の各桁）にする
+    let started = false;                // 0 以外の桁が出たか
+    for d in b.digits() {               // 上の桁から 1 桁ずつ（0〜9）
+        if d != 0 { started = true; }
+        if started { console::putc(('0' as u8 + d) as char); }
+    }
+    if !started { console::putc('0'); } // 値が 0 のときは「0」を出す
+}
+
+fn main() {
+    let a = 200;                        // 型を書かないと u8
+    let b: u8 = 100;                    // 型を書いた u8
+    let sum = a + b;                    // 300 は u8 に入らないので一周して 44 になる
+    print(p"200+100 (U8)  = ");
+    print_u8(sum);
+    newline();
+
+    let wide: u16 = a as u16 + b as u16;    // u16 に広げてから足すと 300
+    print(p"200+100 (U16) = ");
+    print_u16(wide);
+    newline();
+
+    let x: u8 = 10;                     // 位置
+    let dx: i8 = -3;                    // 変化量（負の数）
+    let nx = x + dx;                    // u8 + i8 → u8（例外として許される。7 になる）
+    print(p"10+(-3)       = ");
+    print_u8(nx);
+    newline();
+
+    while COUNT < LIMIT {               // COUNT が 5 になるまでくり返す
+        COUNT += 1;                     // static はそのまま書き換えられる（特別な印は要らない）
+        print(p"COUNT = ");
+        print_u8(COUNT);
+        newline();
+    }
+}

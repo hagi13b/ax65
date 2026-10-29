@@ -1,0 +1,23 @@
+// hw/acia_console.ax65 — console インターフェースの ACIA（6551）による実装（仕様書 1.0 8.4節）
+
+flags AciaStatus { Pe, Fe, Ovr, Rdrf, Tdre, Dcd, Dsr, Irq }    // ビット0〜7
+
+impl console {
+    io      DATA:   u8         @ $8000; // 送信データ（書く）と受信データ（読む）
+    io(in)  STATUS: AciaStatus @ $8001; // 状態（読み込み専用）
+
+    fn putc(c: char) {                  // 送信の準備ができるまで待ってから 1 文字送る（インターフェースの関数は自動で公開される）
+        while !STATUS.contains(AciaStatus::Tdre) { }
+        DATA = c as u8;
+    }
+
+    fn poll() -> Option<char> {         // 受信していれば文字を返し、していなければ None
+        if STATUS.contains(AciaStatus::Rdrf) { Some(DATA as char) } else { None }
+    }
+
+    fn getc() -> char {                 // 1 文字届くまで待つ
+        loop {
+            if let Some(c) = poll() { return c; }
+        }
+    }
+}

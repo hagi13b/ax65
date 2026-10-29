@@ -1,0 +1,6 @@
+// <ax65>/std/console.ax65 — 1文字の入出力のインターフェース（標準ライブラリ。仕様書 1.0 20.4節）
+interface console {
+    fn putc(c: char);                   // 1 文字送る
+    fn getc() -> char;                  // 1 文字届くまで待つ
+    fn poll() -> Option<char>;          // 届いていれば返す。待たない
+}

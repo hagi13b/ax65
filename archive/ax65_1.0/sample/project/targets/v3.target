@@ -1,0 +1,17 @@
+// targets/v3.target — v2 に画面を追加した構成（仕様書 1.0 16.1節の extends）
+target v3 extends v2 {
+    clock        = 2_000_000;           // 2MHz に上げた
+    irq_interval = 33_333;
+    load         = $0800;               // 画面メモリ（$0400〜$07FF）の後ろに読み込む
+
+    region ram = [$0200..=$03FF, $0800..=$BFFF];    // 区画を書き直す（同じ種類の区画は置き換え）
+    region io  = [$0400..=$07FF, $6000..=$8FFF];    // 画面メモリを I/O の区画に加える
+
+    encoding screen {                   // 画面用の文字の変換表（Apple II と同じ並び）
+        ' '..='?' => $A0..=$BF;
+        '@'..='_' => $C0..=$DF;
+    }
+
+    bind screen = hw::v3_screen;        // 画面の実装
+    const SCREEN_WIDTH: u8 = 40;        // コードを伴わない性質は定数で書く
+}

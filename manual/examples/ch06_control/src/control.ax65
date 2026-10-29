@@ -1,0 +1,67 @@
+// src/control.ax65 — 制御構文：for・if・match・ラベル付きの break・値を返す loop
+use console;                            // 1 文字の入出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+use core::{divmod8, mul8};              // 割り算（余り）と掛け算
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+fn fizzbuzz() {                         // 1〜30 の FizzBuzz
+    for i in 1..=30 {                   // 1 から 30 まで（30 を含む）
+        let by3 = divmod8(i, 3).r == 0; // 3 で割り切れるか（% 3 は書けないので divmod8 を使う）
+        let by5 = divmod8(i, 5).r == 0; // 5 で割り切れるか
+        if by3 && by5 {
+            print(p"FIZZBUZZ");
+        } else if by3 {
+            print(p"FIZZ");
+        } else if by5 {
+            print(p"BUZZ");
+        } else {
+            print_u8(i);
+        }
+        newline();
+    }
+}
+
+fn grade(score: u8) -> str {            // 点数を評価の文字列にする（match は値を返せる）
+    match score {
+        0..=59   => p"C",               // 範囲で書ける
+        60..=79  => p"B",
+        80..=99  => p"A",
+        100      => p"PERFECT",
+        _        => p"?",               // u8 は値が多いので _ が必須
+    }
+}
+
+fn find_pair() {                        // x * y == 24 になる最初の組を探す
+    'outer: for x in 1..10 {            // 外側のループにラベルを付ける
+        for y in 1..10 {
+            if mul8(x, y) == 24 {       // mul8 の結果は u16（24 も u16 として比べる）
+                print_u8(x);
+                print(p" * ");
+                print_u8(y);
+                print(p" = 24");
+                newline();
+                break 'outer;           // 両方のループを一度に抜ける
+            }
+        }
+    }
+}
+
+fn main() {
+    fizzbuzz();
+    print(p"85 POINTS: ");
+    print(grade(85));
+    newline();
+    find_pair();
+
+    print(p"PRESS ANY KEY");
+    newline();
+    let c = loop {                      // キーが来るまでくり返し、break で値を返す
+        if let Some(k) = console::poll() { break k; }
+    };
+    print(p"YOU PRESSED ");
+    console::putc(c);
+    newline();
+}

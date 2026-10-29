@@ -1,0 +1,7 @@
+// hw/hexmon_keyboard.ax65 — keyboard インターフェースの、HEXMON の POLL_KEY による実装（仕様書 1.1 8.4節）
+//   v2.target が bind している。meteor は hw::hexpad を直接使うので、この実装は呼ばない。
+
+impl keyboard {
+    extern fn poll() -> Option<char> in A   // POLL_KEY：新しいキーがあればキャリー 1 で、A にキーコード
+        @ $FF03 clobbers(A, flags) stack(4);
+}

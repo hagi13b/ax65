@@ -1,0 +1,85 @@
+// src/sfx.ax65 — タイマー割り込みで効果音：IRQ 処理が 1/60 秒ごとに音の高さを変える
+//   ターゲット：v2x（仮の構成）。HEXPAD の 1：コイン、2：クラッシュ、3：ジャンプ、A/D：終わる
+use sound;                              // 音（この例では IRQ 処理の中だけで使う）
+use hw::via_timer;                      // 1/60 秒の IRQ
+use hw::hexpad;                         // HEXPAD のキー（メインだけで使う）
+use lib::notes;                         // 周波数 → period の計算
+use lib::out::{print, newline};         // 端末への出力
+
+enum Sfx { Silent, Coin, Crash, Jump, Stop }    // 効果音の種類（Stop は音を止める指示）
+
+shared SFX_REQ: Sfx = Sfx::Silent;      // メインからの注文（両方が書く。1 バイト）
+shared(irq) FRAMES: u8 = 0;             // 1/60 秒ごとに増える
+
+range Fx = 0..8;                        // 効果音の 8 ステップ（1 ステップ = 1/60 秒）
+
+comptime fn coin_hz(i: int) -> real { if i < 3 { 987.767 } else { 1318.51 } }   // B5 のあと E6（コイン）
+comptime fn crash_hz(i: int) -> real { 320.0 - i as real * 30.0 }               // だんだん低く
+comptime fn jump_hz(i: int) -> real { 300.0 + i as real * 90.0 }                // だんだん高く
+
+const COIN_TONES:  [u16; Fx] = [for i in 0..8 => notes::period_of(coin_hz(i))];
+const CRASH_TONES: [u16; Fx] = [for i in 0..8 => notes::period_of(crash_hz(i))];
+const JUMP_TONES:  [u16; Fx] = [for i in 0..8 => notes::period_of(jump_hz(i))];
+
+#[interrupt(irq)]
+fn on_irq() {
+    if via_timer::ack() {               // タイマー1 による割り込み
+        FRAMES += 1;
+        sfx_step();
+    }
+}
+
+fn sfx_step() {                         // 効果音を 1 ステップ進める（IRQ 処理からだけ呼ぶ）
+    static KIND: Sfx = Sfx::Silent;     // 鳴らしている効果音（IRQ 処理の中だけで使う）
+    static POS: u8 = 0;                 // 何ステップ目か
+
+    let req = SFX_REQ;                  // 注文を読む（1 命令の操作）
+    if req != Sfx::Silent {             // 新しい注文があれば、最初から鳴らす
+        KIND = req;
+        POS = 0;
+        SFX_REQ = Sfx::Silent;          // 注文を受け取った印
+    }
+    match KIND {
+        Sfx::Silent => { return; }
+        Sfx::Stop   => { sound::off(); KIND = Sfx::Silent; return; }
+        _           => {}
+    }
+    if let Some(i) = Fx::check(POS) {   // 0〜7 なら鳴らす
+        match KIND {
+            Sfx::Coin  => sound::tone(COIN_TONES[i]),
+            Sfx::Crash => sound::tone(CRASH_TONES[i]),
+            Sfx::Jump  => sound::tone(JUMP_TONES[i]),
+            _          => {}
+        }
+        POS += 1;
+    } else {                            // 8 ステップ鳴らし終えた
+        sound::off();
+        KIND = Sfx::Silent;
+    }
+}
+
+fn wait_frames(n: u8) {                 // n フレーム（n/60 秒）待つ
+    let start = FRAMES;
+    while FRAMES - start < n { }        // FRAMES は 1 バイトなので、そのまま読める
+}
+
+fn main() {
+    print(p"HEXPAD 1: COIN  2: CRASH  3: JUMP  A/D: QUIT");
+    newline();
+    irq_enable();
+    loop {
+        if let Some(k) = hexpad::key() {    // HEXPAD のキーを、待たずに調べる
+            match k {
+                1 => { SFX_REQ = Sfx::Coin; }   // 注文を書くだけ（1 命令の操作）
+                2 => { SFX_REQ = Sfx::Crash; }
+                3 => { SFX_REQ = Sfx::Jump; }
+                hexpad::KEY_AD => { break; }
+                _ => {}
+            }
+        }
+    }
+    SFX_REQ = Sfx::Stop;                // 音を止めるのも IRQ 処理に頼む
+    wait_frames(2);                     // IRQ 処理が受け取るのを待つ
+    via_timer::stop();
+    irq_disable();
+}

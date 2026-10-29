@@ -1,0 +1,7 @@
+// hw/hexmon_keyboard.ax65 — keyboard インターフェースの実装：HEXPAD のキーを、HEXMON の POLL_KEY（$FF03）で読む
+//   POLL_KEY は、新しく押されたキーがあればキャリーを 1 にし、A にキーコードを入れて戻る（なければキャリー 0）。
+//   キーコードは、0〜F が $00〜$0F、JMP が $11、A/D が $12、INC が $13（文字としては '\x00'〜'\x13' が届く）。
+
+impl keyboard {
+    extern fn poll() -> Option<char> in A @ $FF03 clobbers(A, flags) stack(4);    // ROM のルーチンを、そのまま実装にする
+}

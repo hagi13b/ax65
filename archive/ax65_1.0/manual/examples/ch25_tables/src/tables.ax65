@@ -1,0 +1,41 @@
+// src/tables.ax65 — コンパイル時の表：正弦波の表を作って画面に描き、外部ファイルの絵を表示する
+use screen;                             // 文字画面（v3 だけ）
+#[allow(unused_imports)]                // -D debug なしでは使わないので、警告を止める
+use lib::out::{print, newline, print_u8};   // 端末への出力（デバッグ用）
+
+comptime assert(target.has(screen), "このプログラムは画面のあるターゲット（v3）用です");
+
+range Gx = 0..40;                       // 画面の列
+range Pr = 0..8;                        // 絵の行・列
+
+comptime fn wave_y(i: int) -> u8 {      // i 列目の波の高さ（行）。コンパイル時だけに呼ばれる
+    round(12.0 - 10.0 * sin(i as real * 2.0 * PI / 40.0)) as u8    // 2〜22 の行。u8 に収まらなければエラー
+}
+
+const WAVE: [u8; Gx] = [for i in 0..40 => wave_y(i)];   // 40 個の表（プログラムには値だけが入る）
+const MASK: [u8; Pr] = [for i in 0..8 => 1 << (7 - i)]; // 左の列ほど上のビット
+const PICTURE: [u8; Pr] = include_bin("../data/smile.bin"); // 8 バイトの絵（1 = 点）
+
+comptime assert(WAVE.len() == 40, "WAVE の長さは画面の幅と同じ");
+
+fn main() {
+    screen::clear();
+    for x in Gx {
+        screen::put(x as u8, 12, '-'@screen);           // 0 の線
+        screen::put(x as u8, WAVE[x], '*'@screen);      // 波（表を引くだけ。sin の計算は実行時にしない）
+    }
+    for r in Pr {                       // 右上に 8x8 の絵を描く
+        for c in Pr {
+            if PICTURE[r] & MASK[c] != 0 {
+                screen::put(31 + c as u8, r as u8, '#'@screen);
+            }
+        }
+    }
+    comptime if build.debug {           // -D debug のときだけ、表の中身を端末に出す
+        for x in Gx {
+            print_u8(WAVE[x]);
+            print(p" ");
+        }
+        newline();
+    }
+}

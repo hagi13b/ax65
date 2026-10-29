@@ -1,0 +1,5 @@
+// <ax65>/std/mul.ax65 — 掛け算のインターフェース（仕様書 1.0 20.4節）
+interface mul {
+    fn mul8(a: u8, b: u8) -> u16;
+    fn mul16(a: u16, b: u16) -> u32;
+}

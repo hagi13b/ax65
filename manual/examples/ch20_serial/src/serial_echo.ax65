@@ -1,0 +1,33 @@
+// src/serial_echo.ax65 — シリアル端末：端末の文字と HEXPAD のキーを両方読んで、端末に表示する
+use console;                            // シリアル端末（UART）
+use keyboard;                           // v2 では HEXPAD のキー（HEXMON の POLL_KEY）
+use lib::out::{print, newline, print_hex8}; // 出力の関数
+
+fn main() {
+    print(p"TYPE ON THE TERMINAL OR PRESS HEXPAD KEYS.");
+    newline();
+    print(p"ESC OR A/D TO QUIT.");
+    newline();
+    loop {
+        if let Some(c) = console::poll() {      // 端末から文字が届いていれば
+            if c == '\x1B' { break; }   // ESC で終わり
+            if c == '\r' {
+                newline();              // Enter は改行にする
+            } else {
+                console::putc(c);       // 文字を見せる（エコー）
+                print(p"($");
+                print_hex8(c as u8);    // 文字のコードも見せる
+                print(p") ");
+            }
+        }
+        if let Some(k) = keyboard::poll() {     // HEXPAD のキーが押されていれば
+            if k == '\x12' { break; }   // A/D で終わり（キーコード $12）
+            print(p"[KEY $");
+            print_hex8(k as u8);        // キーコードを 16 進で見せる
+            print(p"] ");
+        }
+    }
+    newline();
+    print(p"BYE");
+    newline();
+}

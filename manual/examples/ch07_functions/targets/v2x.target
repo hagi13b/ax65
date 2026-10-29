@@ -1,0 +1,9 @@
+// targets/v2x.target — v2 に VIA を 3 個増設し、IRQ を使えるようにした構成（仮）。仕様書 16.7節の v2x と同じ
+target v2x extends v2 {
+    irq          = indirect($7EFE);     // IRQ 対応に改造した HEXMON が jmp ($7EFE) で飛ぶ
+    irq_interval = 30_708;              // タイマーの割り込みは 60Hz（1_842_500 ÷ 60 サイクルごと）
+    region io    = [$8000..=$800F, $8400..=$8403, $8800..=$880F,   // v2 の I/O の区画を置き換える
+                    $8C00..=$8C2F];     // 増設 VIA：$8C00 タイマー、$8C10 音、$8C20 ASCII キーボード
+    bind keyboard = hw::via_keyboard;   // キーボードは増設 VIA の ASCII キーボード（v2 の bind を置き換える）
+    bind sound    = hw::via_sound;      // 音は増設 VIA のタイマー1 と PB7（v2 にない bind を足す）
+}

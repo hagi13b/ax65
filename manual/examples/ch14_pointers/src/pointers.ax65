@@ -1,0 +1,55 @@
+// src/pointers.ax65 — ポインタ：ページ単位の配列を、ポインタを使って埋めて合計する
+use console;                            // 1 文字の出力
+use bcd;                                // u16 の表示に使う
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+
+fn print_u16(n: u16) {                  // 0〜65535 を 10 進で出す
+    let b = bcd::from_u16(n);
+    let started = false;
+    for d in b.digits() {
+        if d != 0 { started = true; }
+        if started { console::putc(('0' as u8 + d) as char); }
+    }
+    if !started { console::putc('0'); }
+}
+
+static PAGES: [[u8; 256]; 2] = [[0; 256]; 2];   // 256 バイトのページが 2 つ（ページの先頭に置かれる）
+
+#[packed]
+struct Rec { id: u8, hp: u8 }           // ポインタで指すので、連続したバイト列にする
+static HERO: Rec = Rec { id: 1, hp: 10 };
+
+fn fill(p: ptr<u8>, v: u8) {            // p が指す 256 バイトを v で埋める（p は自動でゼロページに置かれる）
+    for i in 0..=255 {                  // 0〜255（256 回）
+        p[i] = v;                       // sta (p),y
+    }
+}
+
+fn sum(p: ptr<u8>) -> u16 {             // p が指す 256 バイトの合計
+    let t: u16 = 0;
+    for i in 0..=255 { t += p[i] as u16; }  // lda (p),y
+    t
+}
+
+fn heal(r: ptr<Rec>) {                  // packed 構造体のフィールドを、ポインタを通して書き換える
+    r.hp += 5;                          // ldy #1 / lda (r),y …
+}
+
+fn main() {
+    let p: ptr<u8> = &PAGES[0];         // 0 番目のページの先頭
+    fill(p, 1);
+    fill(p.add_pages(1), 2);            // 次のページ（上位バイトに 1 を足すだけ）
+    print(p"PAGE 0 SUM = ");
+    print_u16(sum(&PAGES[0]));          // 256
+    newline();
+    print(p"PAGE 1 SUM = ");
+    print_u16(sum(&PAGES[1]));          // 512
+    newline();
+
+    heal(&HERO);                        // static のアドレスはどこに渡してもよい
+    print(p"HERO HP = ");
+    print_u16(HERO.hp as u16);          // 15
+    newline();
+}

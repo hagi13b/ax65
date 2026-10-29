@@ -1,0 +1,27 @@
+// src/keyboard_echo.ax65 — ASCII キーボード：打った文字を端末に出し、文字のコードを 7 セグメント LED に出す
+//   ターゲット：v2x（仮の構成）。ESC で終わる（v2 でビルドしたときは、HEXPAD の A/D で終わる）
+use console;                            // シリアル端末
+use keyboard;                           // v2x では増設 VIA の ASCII キーボード
+use hw::hexpad;                         // 7 セグメント LED
+use lib::out::{print, newline};         // 端末への出力
+
+fn main() {
+    print(p"TYPE ON THE ASCII KEYBOARD. ESC TO QUIT.");
+    newline();
+    hexpad::clear();
+    loop {
+        if let Some(c) = keyboard::poll() {     // キーが押されていれば
+            if c == '\x1B' || c == '\x12' { break; }   // ESC で終わり（'\x12' は v2 の HEXPAD の A/D）
+            hexpad::show_hex(0, c as u8);       // 右の 2 桁に文字のコードを 16 進で出す
+            hexpad::show_code(5, hexpad::seg(c));   // 左端に、出せる文字なら文字の形を出す（実行時の変換）
+            if c == '\r' {
+                newline();              // Enter は改行にする
+            } else {
+                console::putc(c);       // 端末に文字を出す
+            }
+        }
+    }
+    newline();
+    print(p"BYE");
+    newline();
+}

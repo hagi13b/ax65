@@ -1,0 +1,30 @@
+// src/keyboard_echo.ax65 — キーボード入力：シリアル端末と ASCII キーボードの両方から読む
+use console;                            // シリアル端末（ACIA）
+use keyboard;                           // ASCII キーボード（実装はターゲットの bind で決まる）
+use lib::out::{print, newline, print_hex8}; // 出力の関数
+
+fn read_any() -> Option<char> {         // どちらかに文字が来ていれば返す。待たない
+    if let Some(c) = keyboard::poll() { return Some(c); }
+    console::poll()                     // キーボードになければ端末を見る
+}
+
+fn main() {
+    print(p"TYPE ON EITHER KEYBOARD. ESC TO QUIT.");
+    newline();
+    loop {
+        if let Some(c) = read_any() {
+            if c == '\x1B' { break; }   // ESC で終わり
+            if c == '\r' {
+                newline();              // Enter は改行にする
+            } else {
+                console::putc(c);       // 文字を見せる
+                print(p"($");
+                print_hex8(c as u8);    // 文字のコードも見せる
+                print(p") ");
+            }
+        }
+    }
+    newline();
+    print(p"BYE");
+    newline();
+}

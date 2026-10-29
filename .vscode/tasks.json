@@ -1,0 +1,91 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build ax65 (release)",
+      "type": "shell",
+      "command": "cargo build --release",
+      "options": {
+        "cwd": "${workspaceFolder}/compiler"
+      },
+      "problemMatcher": "$rustc",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "Run ax65",
+      "type": "shell",
+      "command": "cargo run --",
+      "options": {
+        "cwd": "${workspaceFolder}/compiler"
+      },
+      "problemMatcher": "$rustc",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Build all sample projects",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build_samples.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Build all example projects",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build_examples.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Package clean release zip",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/package_release.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Git status",
+      "type": "shell",
+      "command": "git status --short --branch",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

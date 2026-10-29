@@ -1,0 +1,30 @@
+// hw/acia_console.ax65 — console インターフェースの実装：実機 v2 の UART（6551 互換、$8400〜$8402）
+//   19200bps・8 ビット・パリティなし・ストップビット 1 で固定。CPU 基板の USB-C で PC の端末ソフトとつながる。
+//   使う前に、コマンドレジスタに $0B（割り込みなし）を書く。
+
+flags AciaStatus { Pe, Fe, Ovr, Rdrf, Tdre, Dcd, Dsr, Irq }    // 状態レジスタのビット0〜7（Rdrf = 受信データあり、Tdre = 送信バッファ空き）
+
+impl console {
+    io      DATA:   u8         @ $8400; // 送信データ（書く）と受信データ（読む）
+    io(in)  STATUS: AciaStatus @ $8401; // 状態（読み込み専用。$8401 に書くとソフトリセットになるので書かない）
+    io(out) CMD:    u8         @ $8402; // コマンド
+
+    init {
+        CMD = $0B;                      // 割り込みなしで使う（最初に 1 回だけ書く）
+    }
+
+    fn putc(c: char) {                  // 送信バッファが空くまで待ってから 1 文字送る（インターフェースの関数は自動で公開される）
+        while !STATUS.contains(AciaStatus::Tdre) { }
+        DATA = c as u8;
+    }
+
+    fn poll() -> Option<char> {         // 受信していれば文字を返し、していなければ None
+        if STATUS.contains(AciaStatus::Rdrf) { Some(DATA as char) } else { None }
+    }
+
+    fn getc() -> char {                 // 1 文字届くまで待つ
+        loop {
+            if let Some(c) = poll() { return c; }
+        }
+    }
+}

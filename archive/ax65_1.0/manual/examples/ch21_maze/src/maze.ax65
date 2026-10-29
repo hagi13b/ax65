@@ -1,0 +1,98 @@
+// src/maze.ax65 — ゲーム画面を描く：迷路を画面に描き、キーボードで @ を動かしてゴールを目指す
+use keyboard;                           // ASCII キーボード
+use screen;                             // 文字画面（v3 だけ）
+
+comptime assert(target.has(screen), "このプログラムは画面のあるターゲット（v3）用です");
+
+range Mx = 0..16;                       // 迷路の列（0〜15）
+range My = 0..8;                        // 迷路の行（0〜7）
+
+const MAZE: [u16; My] = [               // 1 行を 16 ビットで表す（1 = 壁）。左端の列が最上位ビット
+    0b1111_1111_1111_1111,    // ################
+    0b1001_0000_0000_0001,    // #..#...........#
+    0b1001_0111_1101_1101,    // #..#.#####.###.#
+    0b1000_0100_0100_0101,    // #....#...#...#.#
+    0b1111_0101_0111_0101,    // ####.#.#.###.#.#
+    0b1000_0001_0000_0101,    // #......#.....#.#
+    0b1011_1111_0111_1101,    // #.######.#####.#
+    0b1111_1111_1111_1111,    // ################
+];
+const BIT: [u16; Mx] = [for i in 0..16 => 1 << (15 - i)];  // 列ごとのビット（コンパイル時に計算）
+
+const OX: u8 = 12;                      // 迷路を描く位置（画面の列）
+const OY: u8 = 6;                       // 迷路を描く位置（画面の行）
+const GOAL_X: Mx = 14;                  // ゴールの位置（定数なので Mx として書ける）
+const GOAL_Y: My = 6;
+
+static PX: Mx = 1;                      // プレイヤーの位置
+static PY: My = 1;
+static STEPS: bcd16 = 0;                // 歩いた数（10 進 4 桁）
+
+fn put_str(x: u8, y: u8, s: str@screen) {   // 画面用の文字列を横に書く
+    for c in s { screen::put(x, y, c); x += 1; }
+}
+
+fn put_bcd16(x: u8, y: u8, v: bcd16) {  // BCD の 4 桁を画面に書く
+    for d in v.digits() {
+        screen::put(x, y, ('0'@screen as u8 + d) as char@screen);  // '0' の画面コードに足す
+        x += 1;
+    }
+}
+
+fn is_wall(x: Mx, y: My) -> bool {      // 壁か（& は != より強く結び付く）
+    MAZE[y] & BIT[x] != 0
+}
+
+fn draw_cell(x: Mx, y: My, c: char@screen) {   // 迷路の座標に 1 文字書く
+    screen::put(OX + x as u8, OY + y as u8, c);
+}
+
+fn draw_maze() {
+    for y in My {
+        for x in Mx {
+            let c = if is_wall(x, y) { '#'@screen } else { ' '@screen };   // if は値を返せる
+            draw_cell(x, y, c);
+        }
+    }
+    draw_cell(GOAL_X, GOAL_Y, '$'@screen);      // ゴール
+}
+
+fn try_move(dx: i8, dy: i8) {           // 1 マス動く。壁や外なら動かない
+    let nx = Mx::check(PX as u8 + dx);  // u8 + i8 → u8。0 の左は 255 になり、check で None になる
+    let ny = My::check(PY as u8 + dy);
+    if let Some(x) = nx {
+        if let Some(y) = ny {
+            if !is_wall(x, y) {
+                draw_cell(PX, PY, ' '@screen);  // 前の位置を消す
+                PX = x;
+                PY = y;
+                draw_cell(PX, PY, '@'@screen);  // 新しい位置に描く
+                STEPS += 1;
+                put_bcd16(6, 0, STEPS);   // "STEPS " の後ろ（6 列目から）
+            }
+        }
+    }
+}
+
+fn main() {
+    screen::clear();
+    put_str(0, 0, p"STEPS 0000   WASD: MOVE  Q: QUIT"@screen);
+    draw_maze();
+    draw_cell(PX, PY, '@'@screen);
+    loop {
+        if let Some(c) = keyboard::poll() {
+            match c {
+                'W' | 'w' => try_move(0, -1),
+                'S' | 's' => try_move(0, 1),
+                'A' | 'a' => try_move(-1, 0),
+                'D' | 'd' => try_move(1, 0),
+                'Q' | 'q' => { break; }
+                _         => {}
+            }
+            if PX == GOAL_X && PY == GOAL_Y {       // 同じ範囲型どうしなので比べられる
+                put_str(OX + 3, OY + 9, p"GOAL!"@screen);
+                break;
+            }
+        }
+    }
+}

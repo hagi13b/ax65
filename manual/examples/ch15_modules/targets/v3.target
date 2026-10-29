@@ -1,0 +1,8 @@
+// targets/v3.target — v2 に文字画面を追加した構成（仮）。仕様書 16.7節の v3 と同じ
+target v3 extends v2 {
+    region io = [$8000..=$800F, $8400..=$8403, $8800..=$880F,     // v2 の I/O の区画を置き換える
+                 $9000..=$93BF];        // 画面メモリ（40×24 文字）
+    encoding screen { ' '..='~' => $20..=$7E; }     // 画面の文字コード（ASCII と同じ）
+    bind screen = hw::v3_screen;        // 画面の実装（v2 にない bind を足す）
+    const SCREEN_WIDTH: u8 = 40;        // 画面の幅（文字）
+}

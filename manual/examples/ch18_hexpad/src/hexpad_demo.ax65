@@ -1,0 +1,40 @@
+// src/hexpad_demo.ax65 — HEXPAD：7 セグメント LED とキーを、レジスタとモニタの API の両方で使う
+//   0〜F：左の 4 桁に右から入る　INC：右の 2 桁を 1 増やす　JMP：0 に戻す　A/D：終わる
+use hw::hexpad;                         // HEXPAD のレジスタを直接使うモジュール
+use hw::hexmon;                         // モニタの API（extern fn）
+
+fn main() {
+    hexpad::show_text(p"HELLO");        // 左から HELLO と表示する（seg で表示コードにする）
+    loop {                              // キーが押されるまで、表示を点滅させる
+        hexpad::display_on(false);      // 消す（表示の中身は残る）
+        hexmon::delay_ms(200);
+        hexpad::display_on(true);       // つける
+        hexmon::delay_ms(200);
+        if let Some(_) = hexpad::key() { break; }   // どれかのキーが押されていたら抜ける
+    }
+
+    let value: u16 = 0;                 // 打ち込んだ 4 桁の 16 進数
+    hexpad::show_hex(2, 0);             // 左の 2 桁：value の上位
+    hexpad::show_hex(1, 0);             // 中の 2 桁：value の下位
+    hexpad::show_hex(0, 0);             // 右の 2 桁：INC を押した回数
+    loop {
+        let k = hexmon::wait_key();     // キーが押されるまで待つ（モニタの WAIT_KEY）
+        if k < $10 {                    // 0〜F：右から入れて、左へずらす
+            value = (value << 4) | k as u16;
+            hexpad::show_hex(2, (value >> 8) as u8);
+            hexpad::show_hex(1, value as u8);
+        } else if k == hexpad::KEY_INC {    // INC：右の 2 桁を 1 増やす
+            hexpad::inc_hex(0);         // 表示そのものを数として使う（inc 命令 1 つ）
+        } else if k == hexpad::KEY_JMP {    // JMP：0 に戻し、モニタの表示バッファを使って表示する
+            value = 0;
+            hexmon::put_hex(0, 4);      // SEGDATA の左の 2 桁に 00 を入れる
+            hexmon::put_hex(0, 2);      // 中の 2 桁
+            hexmon::put_hex(0, 0);      // 右の 2 桁
+            hexmon::display();          // SEGDATA の 6 桁をまとめて表示する
+        } else if k == hexpad::KEY_AD { // A/D：終わる
+            break;
+        }
+    }
+    hexpad::show_text(p"BYE");          // 「bYE」と出して
+    hexmon::delay_10ms(100);            // 1 秒待ってから、モニタに戻る
+}

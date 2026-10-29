@@ -1,0 +1,96 @@
+// src/meteor7.ax65 — AX65 サンプル：7セグメント版の隕石よけ（AX65 仕様書 1.1）
+//
+// ターゲット：v2（実機。HEXPAD の 7セグメント LED 6 桁とキーだけで遊べる）
+// 遊び方：
+//   ・6 桁がそれぞれ 1 本の列。上に隕石があると「-」、自分がいる列は「u」、両方なら「o」
+//   ・隕石は少しすると落ちる。そのとき自分がその列にいたら終わり。よけるたびに 1 点
+//   ・4 のキーで左、6 のキーで右、A/D で終了。終わると右の 4 桁に点数が出る。何かキーを押すとモニタへ戻る
+
+use hw::hexpad;                         // 表示とキー
+use hw::hexmon::delay_ms;               // HEXMON の時間待ち
+
+const MIN_SPEED: u8 = 20;               // いちばん速いとき：1 段を 20 × 10ms で進める
+
+static METEOR: [bool; hexpad::Digit] = [false; hexpad::Digit];   // その列の上に隕石があるか
+static PLAYER: hexpad::Digit = 2;       // 自分の列
+static SCORE: bcd16 = 0;                // 点数（10進4桁）
+static SEED: u8 = $5A;                  // 乱数の種（0 以外）
+static SPEED: u8 = 60;                  // 1 段の間にキーを調べる回数（10ms ごと）。よけるたびに減る
+
+asm fn rand_step(r: u8) -> u8 {         // 8ビットの疑似乱数（ガロア型 LFSR）。r は A で届き、A で返す
+    asl a                   ; A を左に1ビットずらす（はみ出たビットはキャリーへ）
+    bcc done                ; はみ出たビットが 0 なら、そのまま done へ飛ぶ
+    eor #$1D                ; 1 なら、決まった値と XOR を取る
+done:                       ; 合流地点
+    rts                     ; A を戻り値として返す
+}
+
+fn rand() -> u8 {
+    SEED = rand_step(SEED);
+    SEED
+}
+
+fn draw() {                             // 6 桁を描き直す
+    for l in hexpad::Digit {
+        let code = if METEOR[l] {
+            if l == PLAYER { hexpad::SMALL_O } else { hexpad::MINUS }
+        } else if l == PLAYER {
+            hexpad::SMALL_U
+        } else {
+            hexpad::BLANK
+        };
+        hexpad::show(l, code);
+    }
+}
+
+fn move_player(k: u8) {
+    match k {
+        $04 => {                        // 4 のキー：左（桁の番号が大きい方）へ
+            if let Some(p) = hexpad::Digit::check(PLAYER as u8 + 1) { PLAYER = p; }
+        }
+        $06 => {                        // 6 のキー：右へ（0 から引くと 255 になり、check で None になる）
+            if let Some(p) = hexpad::Digit::check(PLAYER as u8 - 1) { PLAYER = p; }
+        }
+        _ => {}
+    }
+}
+
+fn step() -> bool {                     // 隕石を 1 段進める。当たったら true
+    for l in hexpad::Digit {            // 上にある隕石が落ちる
+        if METEOR[l] {
+            if l == PLAYER { return true; }
+            METEOR[l] = false;
+            SCORE += 1;                 // BCD の足し算
+            if SPEED > MIN_SPEED { SPEED -= 1; }
+        }
+    }
+    let r = rand();                     // 新しい隕石を出す
+    if let Some(l) = hexpad::Digit::check(r & 7) { METEOR[l] = true; }      // 6 と 7 なら出さない
+    if r & $C0 == 0 {                   // 4 回に 1 回は、もう 1 個（列はビット3〜5 で決める）
+        if let Some(l) = hexpad::Digit::check((r >> 3) & 7) { METEOR[l] = true; }
+    }
+    false
+}
+
+fn main() {
+    'game: loop {
+        draw();
+        for _ in 0..SPEED {             // SPEED 回、10ms ごとにキーを調べる
+            delay_ms(10);
+            if let Some(k) = hexpad::poll_key() {
+                if k == $12 { break 'game; }    // A/D：終了
+                move_player(k);
+                draw();
+            }
+        }
+        if step() { break 'game; }
+    }
+    delay_ms(250);                      // ぶつかったところを少し見せる
+    delay_ms(250);
+    hexpad::show(5, hexpad::MINUS);     // 左の 2 桁は「--」
+    hexpad::show(4, hexpad::MINUS);
+    hexpad::show_bcd(SCORE);            // 右の 4 桁に点数
+    loop {                              // 何かキーが押されるまで待つ
+        if let Some(_) = hexpad::poll_key() { break; }
+    }
+}                                       // main が終わると rts でモニタへ戻る（exit = rts）

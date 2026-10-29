@@ -1,0 +1,19 @@
+// lib/rng.ax65 — 疑似乱数のモジュール（公開するのは seed と next だけ）
+static STATE: u8 = $5A;                 // 非公開：このモジュールの中だけで使う
+
+pub fn seed(s: u8) {                    // 種を決める（0 は使えないので 1 にする）
+    if s == 0 { STATE = 1; } else { STATE = s; }
+}
+
+pub fn next() -> u8 {                   // 次の乱数（1〜255）
+    let r = STATE;
+    let carry = r & $80 != 0;           // 最上位ビット
+    r = r << 1;
+    if carry { r = r ^ $1D; }
+    STATE = r;
+    r
+}
+
+pub fn below(n: u8) -> u8 {             // 0〜n-1 の乱数（n は 2 のべき乗）
+    next() & (n - 1)
+}

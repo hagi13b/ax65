@@ -1,0 +1,7 @@
+// <ax65>/std/screen.ax65 — 文字画面のインターフェース（標準ライブラリ。仕様書 1.0 20.4節）
+interface screen {
+    const WIDTH: u8;                    // 画面の幅（文字）
+    const HEIGHT: u8;                   // 画面の高さ（文字）
+    fn clear();                         // 画面を消す
+    fn put(x: u8, y: u8, c: char@screen);   // (x, y) に 1 文字置く。画面の外なら何もしない
+}

@@ -1,0 +1,31 @@
+// lib/ansi.ax65 — PC の端末の画面を、エスケープシーケンス（ANSI）で操作するモジュール
+//   ESC [ 行 ; 列 H でカーソルを動かし、ESC [ 2 J で画面を消す（行と列は 1 から数える）。
+//   多くの端末ソフト（Tera Term など）が対応している。このモジュールの座標は 0 から数える。
+use console;                            // 1 文字の出力
+use lib::out::{print, print_u8};        // 文字列と数の出力
+
+pub fn clear() {                        // 画面を消し、カーソルを左上に置いて隠す
+    print(p"\x1B[2J\x1B[H\x1B[?25l");
+}
+
+pub fn restore() {                      // 画面を消し、カーソルを見えるように戻す（終わるときに呼ぶ）
+    print(p"\x1B[2J\x1B[H\x1B[?25h");
+}
+
+pub fn move_to(x: u8, y: u8) {          // カーソルを (x, y) へ動かす
+    print(p"\x1B[");                    // ESC [
+    print_u8(y + 1);                    // 行（1 から数える）
+    console::putc(';');
+    print_u8(x + 1);                    // 列（1 から数える）
+    console::putc('H');
+}
+
+pub fn put_at(x: u8, y: u8, c: char) {  // (x, y) に 1 文字書く
+    move_to(x, y);
+    console::putc(c);
+}
+
+pub fn print_at(x: u8, y: u8, s: str) { // (x, y) から文字列を書く
+    move_to(x, y);
+    print(s);
+}

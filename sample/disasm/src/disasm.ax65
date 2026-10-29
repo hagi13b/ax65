@@ -1,0 +1,358 @@
+// src/disasm.ax65 — AX65 サンプル：逆アセンブラ（Apple II のモニタの L コマンドと同じ表示。AX65 仕様書 1.1）
+//
+// 実機 v2 のシリアル端末（19200bps・8N1）で使う。プロンプト * に続けてコマンドを打ち、Enter で実行する。
+//   F800L   … F800 番地から 20 命令を逆アセンブルして表示する
+//   L       … 前回の続きから 20 命令を表示する
+//   300LL   … L を続けて書くと、その回数だけ続けて表示する（Apple II と同じ）
+//   Q       … HEXMON へ戻る
+// 番地は 1〜4 桁の 16 進で書く。5 桁以上打つと、最後の 4 桁が使われる（Apple II と同じ）。小文字でもよい。
+//
+// 表示の形（Apple II の L コマンドと同じ桁位置）：
+//   0300-   A9 C1       LDA   #$C1
+//   0302-   20 ED FD    JSR   $FDED
+//   0305-   D0 F9       BNE   $0300        ← 相対分岐は飛び先の番地で表示する
+//   0307-   0F 20 F6    BBR0  $20,$0300    ← BBR・BBS はゼロページの番地と飛び先
+// 対象は W65C02S のすべての命令（RMB・SMB・BBR・BBS・WAI・STP を含む）。未定義の命令は ??? と表示し、1 バイトとして扱う。
+// 注意：I/O の番地（$8000〜$88FF）を逆アセンブルすると、読んだだけで状態が変わる機器がある（UART の受信データ、HEXPAD のキーなど）。
+
+use console;                            // 1 文字の入出力（実装はターゲットの bind で決まる。v2 は UART）
+
+// ---- 定数 ---------------------------------------------------------------
+
+const LINES: u8 = 20;                   // L 1 回で表示する命令の数（Apple II と同じ）
+const MAX_LINE: u8 = 40;                // 1 行に打てる文字数
+const TITLE: str = p"AX65 DISASSEMBLER  (ADDR L / L / Q)";
+
+// ---- 命令の表 -----------------------------------------------------------
+
+enum Mn {                               // 命令の名前（??? の Bad を含めて 71 個）
+    Adc, And, Asl, Bbr, Bbs, Bcc, Bcs, Beq, Bit, Bmi, Bne, Bpl, Bra, Brk, Bvc, Bvs,
+    Clc, Cld, Cli, Clv, Cmp, Cpx, Cpy, Dec, Dex, Dey, Eor, Inc, Inx, Iny, Jmp, Jsr,
+    Lda, Ldx, Ldy, Lsr, Nop, Ora, Pha, Php, Phx, Phy, Pla, Plp, Plx, Ply, Rmb, Rol,
+    Ror, Rti, Rts, Sbc, Sec, Sed, Sei, Smb, Sta, Stp, Stx, Sty, Stz, Tax, Tay, Trb,
+    Tsb, Tsx, Txa, Txs, Tya, Wai, Bad,
+}
+
+const NAMES: [[char; 3]; Mn] = [        // 名前の 3 文字（Mn と同じ順）
+    "ADC", "AND", "ASL", "BBR", "BBS", "BCC", "BCS", "BEQ", "BIT", "BMI", "BNE", "BPL", "BRA", "BRK", "BVC", "BVS",
+    "CLC", "CLD", "CLI", "CLV", "CMP", "CPX", "CPY", "DEC", "DEX", "DEY", "EOR", "INC", "INX", "INY", "JMP", "JSR",
+    "LDA", "LDX", "LDY", "LSR", "NOP", "ORA", "PHA", "PHP", "PHX", "PHY", "PLA", "PLP", "PLX", "PLY", "RMB", "ROL",
+    "ROR", "RTI", "RTS", "SBC", "SEC", "SED", "SEI", "SMB", "STA", "STP", "STX", "STY", "STZ", "TAX", "TAY", "TRB",
+    "TSB", "TSX", "TXA", "TXS", "TYA", "WAI", "???",
+];
+
+const NAME_1: [char; Mn] = [for i in 0..71 => NAMES[i][0]];   // 1 文字目だけの表（コンパイル時に作る。NAMES そのものはプログラムに入らない）
+const NAME_2: [char; Mn] = [for i in 0..71 => NAMES[i][1]];   // 2 文字目
+const NAME_3: [char; Mn] = [for i in 0..71 => NAMES[i][2]];   // 3 文字目
+
+enum Mode {                             // 番地の付け方（オペランドの形）
+    Imp,                                // なし          CLC
+    Acc,                                // A             ASL（Apple II と同じく A は書かない）
+    Imm,                                // #$nn          LDA #$C1
+    Zp,                                 // $nn           LDA $20
+    ZpX,                                // $nn,X
+    ZpY,                                // $nn,Y
+    Abs,                                // $nnnn         JSR $FDED
+    AbsX,                               // $nnnn,X
+    AbsY,                               // $nnnn,Y
+    Ind,                                // ($nnnn)       JMP ($0036)
+    IndX,                               // ($nn,X)
+    IndY,                               // ($nn),Y
+    IndZp,                              // ($nn)         65C02
+    IndAbsX,                            // ($nnnn,X)     65C02 の JMP
+    Rel,                                // 飛び先の番地  BNE $0300
+    ZpRel,                              // $nn,飛び先    BBR0 $20,$0300
+    Bad,                                // 未定義の命令（1 バイト）
+}
+
+const MODE_LEN: [u8; Mode] = [          // 命令の長さ（バイト。Mode と同じ順）
+    1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 2, 2, 2, 3, 2, 3, 1,
+];
+
+const OP_MN: [Mn; 256] = [              // 命令コード → 名前（1 行に 8 個。$x7 と $xF のビットの番号は表示のときに付ける）
+    // $00〜$0F
+    Mn::Brk, Mn::Ora, Mn::Bad, Mn::Bad, Mn::Tsb, Mn::Ora, Mn::Asl, Mn::Rmb,
+    Mn::Php, Mn::Ora, Mn::Asl, Mn::Bad, Mn::Tsb, Mn::Ora, Mn::Asl, Mn::Bbr,
+    // $10〜$1F
+    Mn::Bpl, Mn::Ora, Mn::Ora, Mn::Bad, Mn::Trb, Mn::Ora, Mn::Asl, Mn::Rmb,
+    Mn::Clc, Mn::Ora, Mn::Inc, Mn::Bad, Mn::Trb, Mn::Ora, Mn::Asl, Mn::Bbr,
+    // $20〜$2F
+    Mn::Jsr, Mn::And, Mn::Bad, Mn::Bad, Mn::Bit, Mn::And, Mn::Rol, Mn::Rmb,
+    Mn::Plp, Mn::And, Mn::Rol, Mn::Bad, Mn::Bit, Mn::And, Mn::Rol, Mn::Bbr,
+    // $30〜$3F
+    Mn::Bmi, Mn::And, Mn::And, Mn::Bad, Mn::Bit, Mn::And, Mn::Rol, Mn::Rmb,
+    Mn::Sec, Mn::And, Mn::Dec, Mn::Bad, Mn::Bit, Mn::And, Mn::Rol, Mn::Bbr,
+    // $40〜$4F
+    Mn::Rti, Mn::Eor, Mn::Bad, Mn::Bad, Mn::Bad, Mn::Eor, Mn::Lsr, Mn::Rmb,
+    Mn::Pha, Mn::Eor, Mn::Lsr, Mn::Bad, Mn::Jmp, Mn::Eor, Mn::Lsr, Mn::Bbr,
+    // $50〜$5F
+    Mn::Bvc, Mn::Eor, Mn::Eor, Mn::Bad, Mn::Bad, Mn::Eor, Mn::Lsr, Mn::Rmb,
+    Mn::Cli, Mn::Eor, Mn::Phy, Mn::Bad, Mn::Bad, Mn::Eor, Mn::Lsr, Mn::Bbr,
+    // $60〜$6F
+    Mn::Rts, Mn::Adc, Mn::Bad, Mn::Bad, Mn::Stz, Mn::Adc, Mn::Ror, Mn::Rmb,
+    Mn::Pla, Mn::Adc, Mn::Ror, Mn::Bad, Mn::Jmp, Mn::Adc, Mn::Ror, Mn::Bbr,
+    // $70〜$7F
+    Mn::Bvs, Mn::Adc, Mn::Adc, Mn::Bad, Mn::Stz, Mn::Adc, Mn::Ror, Mn::Rmb,
+    Mn::Sei, Mn::Adc, Mn::Ply, Mn::Bad, Mn::Jmp, Mn::Adc, Mn::Ror, Mn::Bbr,
+    // $80〜$8F
+    Mn::Bra, Mn::Sta, Mn::Bad, Mn::Bad, Mn::Sty, Mn::Sta, Mn::Stx, Mn::Smb,
+    Mn::Dey, Mn::Bit, Mn::Txa, Mn::Bad, Mn::Sty, Mn::Sta, Mn::Stx, Mn::Bbs,
+    // $90〜$9F
+    Mn::Bcc, Mn::Sta, Mn::Sta, Mn::Bad, Mn::Sty, Mn::Sta, Mn::Stx, Mn::Smb,
+    Mn::Tya, Mn::Sta, Mn::Txs, Mn::Bad, Mn::Stz, Mn::Sta, Mn::Stz, Mn::Bbs,
+    // $A0〜$AF
+    Mn::Ldy, Mn::Lda, Mn::Ldx, Mn::Bad, Mn::Ldy, Mn::Lda, Mn::Ldx, Mn::Smb,
+    Mn::Tay, Mn::Lda, Mn::Tax, Mn::Bad, Mn::Ldy, Mn::Lda, Mn::Ldx, Mn::Bbs,
+    // $B0〜$BF
+    Mn::Bcs, Mn::Lda, Mn::Lda, Mn::Bad, Mn::Ldy, Mn::Lda, Mn::Ldx, Mn::Smb,
+    Mn::Clv, Mn::Lda, Mn::Tsx, Mn::Bad, Mn::Ldy, Mn::Lda, Mn::Ldx, Mn::Bbs,
+    // $C0〜$CF
+    Mn::Cpy, Mn::Cmp, Mn::Bad, Mn::Bad, Mn::Cpy, Mn::Cmp, Mn::Dec, Mn::Smb,
+    Mn::Iny, Mn::Cmp, Mn::Dex, Mn::Wai, Mn::Cpy, Mn::Cmp, Mn::Dec, Mn::Bbs,
+    // $D0〜$DF
+    Mn::Bne, Mn::Cmp, Mn::Cmp, Mn::Bad, Mn::Bad, Mn::Cmp, Mn::Dec, Mn::Smb,
+    Mn::Cld, Mn::Cmp, Mn::Phx, Mn::Stp, Mn::Bad, Mn::Cmp, Mn::Dec, Mn::Bbs,
+    // $E0〜$EF
+    Mn::Cpx, Mn::Sbc, Mn::Bad, Mn::Bad, Mn::Cpx, Mn::Sbc, Mn::Inc, Mn::Smb,
+    Mn::Inx, Mn::Sbc, Mn::Nop, Mn::Bad, Mn::Cpx, Mn::Sbc, Mn::Inc, Mn::Bbs,
+    // $F0〜$FF
+    Mn::Beq, Mn::Sbc, Mn::Sbc, Mn::Bad, Mn::Bad, Mn::Sbc, Mn::Inc, Mn::Smb,
+    Mn::Sed, Mn::Sbc, Mn::Plx, Mn::Bad, Mn::Bad, Mn::Sbc, Mn::Inc, Mn::Bbs,
+];
+
+const OP_MODE: [Mode; 256] = [          // 命令コード → 番地の付け方（OP_MN と同じ並び）
+    // $00〜$0F
+    Mode::Imp,  Mode::IndX, Mode::Bad,   Mode::Bad, Mode::Zp,   Mode::Zp,   Mode::Zp,   Mode::Zp,
+    Mode::Imp,  Mode::Imm,  Mode::Acc,   Mode::Bad, Mode::Abs,  Mode::Abs,  Mode::Abs,  Mode::ZpRel,
+    // $10〜$1F
+    Mode::Rel,  Mode::IndY, Mode::IndZp, Mode::Bad, Mode::Zp,   Mode::ZpX,  Mode::ZpX,  Mode::Zp,
+    Mode::Imp,  Mode::AbsY, Mode::Acc,   Mode::Bad, Mode::Abs,  Mode::AbsX, Mode::AbsX, Mode::ZpRel,
+    // $20〜$2F
+    Mode::Abs,  Mode::IndX, Mode::Bad,   Mode::Bad, Mode::Zp,   Mode::Zp,   Mode::Zp,   Mode::Zp,
+    Mode::Imp,  Mode::Imm,  Mode::Acc,   Mode::Bad, Mode::Abs,  Mode::Abs,  Mode::Abs,  Mode::ZpRel,
+    // $30〜$3F
+    Mode::Rel,  Mode::IndY, Mode::IndZp, Mode::Bad, Mode::ZpX,  Mode::ZpX,  Mode::ZpX,  Mode::Zp,
+    Mode::Imp,  Mode::AbsY, Mode::Acc,   Mode::Bad, Mode::AbsX, Mode::AbsX, Mode::AbsX, Mode::ZpRel,
+    // $40〜$4F
+    Mode::Imp,  Mode::IndX, Mode::Bad,   Mode::Bad, Mode::Bad,  Mode::Zp,   Mode::Zp,   Mode::Zp,
+    Mode::Imp,  Mode::Imm,  Mode::Acc,   Mode::Bad, Mode::Abs,  Mode::Abs,  Mode::Abs,  Mode::ZpRel,
+    // $50〜$5F
+    Mode::Rel,  Mode::IndY, Mode::IndZp, Mode::Bad, Mode::Bad,  Mode::ZpX,  Mode::ZpX,  Mode::Zp,
+    Mode::Imp,  Mode::AbsY, Mode::Imp,   Mode::Bad, Mode::Bad,  Mode::AbsX, Mode::AbsX, Mode::ZpRel,
+    // $60〜$6F
+    Mode::Imp,  Mode::IndX, Mode::Bad,   Mode::Bad, Mode::Zp,   Mode::Zp,   Mode::Zp,   Mode::Zp,
+    Mode::Imp,  Mode::Imm,  Mode::Acc,   Mode::Bad, Mode::Ind,  Mode::Abs,  Mode::Abs,  Mode::ZpRel,
+    // $70〜$7F
+    Mode::Rel,  Mode::IndY, Mode::IndZp, Mode::Bad, Mode::ZpX,  Mode::ZpX,  Mode::ZpX,  Mode::Zp,
+    Mode::Imp,  Mode::AbsY, Mode::Imp,   Mode::Bad, Mode::IndAbsX, Mode::AbsX, Mode::AbsX, Mode::ZpRel,
+    // $80〜$8F
+    Mode::Rel,  Mode::IndX, Mode::Bad,   Mode::Bad, Mode::Zp,   Mode::Zp,   Mode::Zp,   Mode::Zp,
+    Mode::Imp,  Mode::Imm,  Mode::Imp,   Mode::Bad, Mode::Abs,  Mode::Abs,  Mode::Abs,  Mode::ZpRel,
+    // $90〜$9F
+    Mode::Rel,  Mode::IndY, Mode::IndZp, Mode::Bad, Mode::ZpX,  Mode::ZpX,  Mode::ZpY,  Mode::Zp,
+    Mode::Imp,  Mode::AbsY, Mode::Imp,   Mode::Bad, Mode::Abs,  Mode::AbsX, Mode::AbsX, Mode::ZpRel,
+    // $A0〜$AF
+    Mode::Imm,  Mode::IndX, Mode::Imm,   Mode::Bad, Mode::Zp,   Mode::Zp,   Mode::Zp,   Mode::Zp,
+    Mode::Imp,  Mode::Imm,  Mode::Imp,   Mode::Bad, Mode::Abs,  Mode::Abs,  Mode::Abs,  Mode::ZpRel,
+    // $B0〜$BF
+    Mode::Rel,  Mode::IndY, Mode::IndZp, Mode::Bad, Mode::ZpX,  Mode::ZpX,  Mode::ZpY,  Mode::Zp,
+    Mode::Imp,  Mode::AbsY, Mode::Imp,   Mode::Bad, Mode::AbsX, Mode::AbsX, Mode::AbsY, Mode::ZpRel,
+    // $C0〜$CF
+    Mode::Imm,  Mode::IndX, Mode::Bad,   Mode::Bad, Mode::Zp,   Mode::Zp,   Mode::Zp,   Mode::Zp,
+    Mode::Imp,  Mode::Imm,  Mode::Imp,   Mode::Imp, Mode::Abs,  Mode::Abs,  Mode::Abs,  Mode::ZpRel,
+    // $D0〜$DF
+    Mode::Rel,  Mode::IndY, Mode::IndZp, Mode::Bad, Mode::Bad,  Mode::ZpX,  Mode::ZpX,  Mode::Zp,
+    Mode::Imp,  Mode::AbsY, Mode::Imp,   Mode::Imp, Mode::Bad,  Mode::AbsX, Mode::AbsX, Mode::ZpRel,
+    // $E0〜$EF
+    Mode::Imm,  Mode::IndX, Mode::Bad,   Mode::Bad, Mode::Zp,   Mode::Zp,   Mode::Zp,   Mode::Zp,
+    Mode::Imp,  Mode::Imm,  Mode::Imp,   Mode::Bad, Mode::Abs,  Mode::Abs,  Mode::Abs,  Mode::ZpRel,
+    // $F0〜$FF
+    Mode::Rel,  Mode::IndY, Mode::IndZp, Mode::Bad, Mode::Bad,  Mode::ZpX,  Mode::ZpX,  Mode::Zp,
+    Mode::Imp,  Mode::AbsY, Mode::Imp,   Mode::Bad, Mode::Bad,  Mode::AbsX, Mode::AbsX, Mode::ZpRel,
+];
+
+// ---- 変数 ---------------------------------------------------------------
+
+static PC: u16 = $0200;                 // 次に逆アセンブルする番地（L だけを打つと、ここから続ける）
+#[noinit] static LINE: [char; 256];     // 打った 1 行（添字が u8 のどの値でも範囲内になるよう 256 にする）
+static LEN: u8 = 0;                     // LINE に入っている文字数
+#[noinit] static MEMP: ptr<u8>;         // 逆アセンブルしている命令を指すポインタ（ポインタなので自動でゼロページに置かれる）
+
+// ---- メモリを読む -------------------------------------------------------
+
+asm fn point_at(addr: u16) {            // MEMP に番地を入れる。addr は A（下位）と X（上位）で届く
+    sta {MEMP.lo}           ; AX65 の言語には整数を番地にする書き方がないので、ここだけアセンブリで書く
+    stx {MEMP.hi}
+    rts
+}
+
+// ---- 表示 ---------------------------------------------------------------
+
+range Nib = 0..16;                      // 16 進の 1 桁（0〜15）
+const HEX: [char; Nib] = ['0', '1', '2', '3', '4', '5', '6', '7',
+                          '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'];
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 長さ付きの文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+
+fn spaces(n: u8) {                      // 空白を n 個出す
+    for _i in 0..n { console::putc(' '); }
+}
+
+fn print_hex8(n: u8) {                  // 2 桁の 16 進で出す
+    console::putc(HEX[Nib::wrap(n >> 4)]);  // 上の 4 ビット
+    console::putc(HEX[Nib::wrap(n)]);       // 下の 4 ビット（wrap は and #15 の 1 命令）
+}
+
+fn print_hex16(n: u16) {                // 4 桁の 16 進で出す
+    print_hex8((n >> 8) as u8);
+    print_hex8(n as u8);
+}
+
+fn print_zp(b: u8) {                    // $nn
+    console::putc('$');
+    print_hex8(b);
+}
+
+fn print_abs(lo: u8, hi: u8) {          // $nnnn（命令の中では下位・上位の順に並んでいる）
+    console::putc('$');
+    print_hex8(hi);
+    print_hex8(lo);
+}
+
+fn print_target(next: u16, offset: u8) { // 相対分岐の飛び先：次の命令の番地 + 符号付きの変位
+    console::putc('$');
+    print_hex16(next + offset as i8 as i16 as u16);    // i8 → i16 で符号を広げ、ビットはそのままで u16 にする
+}
+
+// ---- 逆アセンブル -------------------------------------------------------
+
+#[inline(never)]                        // #[jump_table] の match を含む関数は展開しない（ax65 1.1.0 では、展開すると表の飛び先の記号が見つからなくなる）
+fn list_one() {                         // PC の 1 命令を 1 行に表示して、PC を次の命令へ進める
+    point_at(PC);                       // MEMP[i] で PC + i 番地を読む（lda (MEMP),y。$FFFF の次は $0000）
+    let op = MEMP[0];
+    let mode = OP_MODE[op];
+    let len = MODE_LEN[mode];
+    let b1 = MEMP[1];                   // オペランド（命令が短ければ使わない）
+    let b2 = MEMP[2];
+
+    newline();                          // 0300-   A9 C1       LDA   #$C1
+    print_hex16(PC);
+    console::putc('-');
+    spaces(3);
+
+    for i in 0..3 {                     // 命令のバイトを 3 個分の欄に並べ、空白 3 個を足す（Apple II と同じ 12 文字）
+        if i < len { print_hex8(MEMP[i]); console::putc(' '); } else { spaces(3); }
+    }
+    spaces(3);
+
+    let m = OP_MN[op];                  // 名前の 3 文字
+    console::putc(NAME_1[m]);
+    console::putc(NAME_2[m]);
+    console::putc(NAME_3[m]);
+    if op & 7 == 7 {                    // $x7（RMB・SMB）と $xF（BBR・BBS）は、上位 4 ビットの下 3 ビットがビットの番号
+        console::putc(('0' as u8 + ((op >> 4) & 7)) as char);
+    }
+
+    if len > 1 {                        // オペランドがあれば、名前の欄を 6 文字にそろえる（なければ空白も出さない）
+        if op & 7 == 7 { spaces(2); } else { spaces(3); }
+    }
+    #[jump_table]
+    match mode {                        // オペランド
+        Mode::Imp | Mode::Acc | Mode::Bad => {}
+        Mode::Imm     => { console::putc('#'); print_zp(b1); }
+        Mode::Zp      => print_zp(b1),
+        Mode::ZpX     => { print_zp(b1); print(p",X"); }
+        Mode::ZpY     => { print_zp(b1); print(p",Y"); }
+        Mode::Abs     => print_abs(b1, b2),
+        Mode::AbsX    => { print_abs(b1, b2); print(p",X"); }
+        Mode::AbsY    => { print_abs(b1, b2); print(p",Y"); }
+        Mode::Ind     => { console::putc('('); print_abs(b1, b2); console::putc(')'); }
+        Mode::IndX    => { console::putc('('); print_zp(b1); print(p",X)"); }
+        Mode::IndY    => { console::putc('('); print_zp(b1); print(p"),Y"); }
+        Mode::IndZp   => { console::putc('('); print_zp(b1); console::putc(')'); }
+        Mode::IndAbsX => { console::putc('('); print_abs(b1, b2); print(p",X)"); }
+        Mode::Rel     => print_target(PC + 2, b1),
+        Mode::ZpRel   => { print_zp(b1); console::putc(','); print_target(PC + 3, b2); }
+    }
+
+    PC += len as u16;                   // $FFFF を越えると $0000 に戻る（一周する）
+}
+
+fn list() {                             // PC から LINES 個の命令を表示する
+    for _i in 0..LINES { list_one(); }
+}
+
+// ---- コマンド -----------------------------------------------------------
+
+fn upper(c: char) -> char {             // 小文字を大文字にする
+    if c >= 'a' && c <= 'z' { (c as u8 - 32) as char } else { c }
+}
+
+fn hex_value(c: char) -> Option<u8> {   // 16 進の数字なら 0〜15
+    if c >= '0' && c <= '9' { return Some(c as u8 - '0' as u8); }
+    if c >= 'A' && c <= 'F' { return Some(c as u8 - 'A' as u8 + 10); }
+    None
+}
+
+fn read_line() {                        // Enter まで 1 行読んで LINE に入れる（エコーし、バックスペースで消せる）
+    LEN = 0;
+    loop {
+        let c = upper(console::getc());
+        if c == '\r' { return; }
+        if c == '\x08' || c == '\x7F' { // バックスペース（BS か DEL）
+            if LEN > 0 {
+                LEN -= 1;
+                print(p"\x08 \x08");    // 端末の上の 1 文字も消す
+            }
+        } else if c >= ' ' && LEN < MAX_LINE {
+            LINE[LEN] = c;
+            LEN += 1;
+            console::putc(c);
+        }
+    }
+}
+
+fn error() {                            // 分からないコマンド：ベルを鳴らして ? を出す
+    console::putc('\x07');
+    newline();
+    console::putc('?');
+}
+
+fn run_line() -> bool {                 // 1 行のコマンドを実行する。Q なら false
+    let addr: u16 = 0;                  // 打ちかけの番地
+    let digits = false;                 // 番地の数字を 1 桁以上打ったか
+    for i in 0..LEN {
+        let c = LINE[i];
+        if let Some(d) = hex_value(c) {
+            addr = (addr << 4) | d as u16;  // 上の桁からずらして入れる（5 桁目からは古い桁があふれて消える）
+            digits = true;
+        } else if c == 'L' {
+            if digits { PC = addr; }    // 番地を書いたらそこから、書かなければ続きから
+            addr = 0;
+            digits = false;
+            list();
+        } else if c == 'Q' {
+            return false;
+        } else if c != ' ' {
+            error();
+            return true;
+        }
+    }
+    if digits { error(); }              // 番地だけでコマンドがない
+    true
+}
+
+// ---- メイン -------------------------------------------------------------
+
+fn main() {
+    newline();
+    print(TITLE);
+    loop {
+        newline();
+        console::putc('*');             // プロンプト（Apple II のモニタと同じ）
+        read_line();
+        if !run_line() { break; }
+    }
+    newline();
+}                                       // main が終わると rts で HEXMON へ戻る（ターゲット定義の exit = rts）

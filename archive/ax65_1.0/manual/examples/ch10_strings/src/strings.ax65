@@ -1,0 +1,59 @@
+// src/strings.ax65 — 文字と文字列：1 行の入力を strbuf にためて、大文字にして表示する
+use console;                            // 1 文字の入出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+const PROMPT: str = p"> ";              // 長さ付きの文字列
+const VOWELS: [char; 5] = "AEIOU";      // 何も付けない "" は [char; N]（長さは型が持つ）
+
+static LINE: strbuf<32> = strbuf::new();    // 書き換えられる文字列（最大 32 文字）
+
+fn upper(c: char) -> char {             // 小文字を大文字にする
+    if c >= 'a' && c <= 'z' { (c as u8 - 32) as char } else { c }
+}
+
+fn is_vowel(c: char) -> bool {          // 母音か
+    for v in VOWELS {                   // 配列の各要素を回す
+        if c == v { return true; }
+    }
+    false
+}
+
+fn read_line() {                        // Enter まで 1 行読む
+    LINE.clear();                       // 空にする
+    loop {
+        let c = console::getc();        // 1 文字届くまで待つ
+        if c == '\r' { break; }         // Enter で終わり
+        if LINE.push(upper(c)) {        // 入れられたら（満杯なら false）
+            console::putc(c);           // 打った文字を見せる（エコー）
+        } else {
+            console::putc('\x07');      // 満杯：ベルの文字を送る
+        }
+    }
+    newline();
+}
+
+fn main() {
+    print(p"TYPE A LINE. EMPTY LINE TO QUIT.");
+    newline();
+    loop {
+        print(PROMPT);
+        read_line();
+        if LINE.len() == 0 { break; }   // 何も打たずに Enter なら終わり
+        let vowels = 0;
+        print(p"UPPER: ");
+        for c in LINE.as_str() {        // strbuf を str として回す
+            console::putc(c);
+            if is_vowel(c) { vowels += 1; }
+        }
+        newline();
+        print(p"LENGTH ");
+        print_u8(LINE.len());
+        print(p", VOWELS ");
+        print_u8(vowels);
+        newline();
+    }
+}

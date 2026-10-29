@@ -1,0 +1,194 @@
+{
+  "name": "AX65",
+  "scopeName": "source.ax65",
+  "fileTypes": [
+    "ax65",
+    "target"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#asm"
+    },
+    {
+      "include": "#attribute"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#chars"
+    },
+    {
+      "include": "#label"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#paths"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.ax65",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.ax65",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "attribute": {
+      "name": "meta.attribute.ax65",
+      "begin": "#\\[",
+      "end": "\\]",
+      "patterns": [
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#strings"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.ax65",
+      "begin": "\\b(p|z|hi)?\"",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.modifier.string-prefix.ax65"
+        }
+      },
+      "end": "\"(@[A-Za-z_][A-Za-z0-9_]*)?",
+      "endCaptures": {
+        "1": {
+          "name": "entity.name.tag.encoding.ax65"
+        }
+      },
+      "patterns": [
+        {
+          "name": "constant.character.escape.ax65",
+          "match": "\\\\(x[0-9A-Fa-f]{2}|[nrt0\\\\'\"])"
+        }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.ax65",
+      "match": "'(\\\\(x[0-9A-Fa-f]{2}|[nrt0\\\\'\"])|[^'\\\\])'(@[A-Za-z_][A-Za-z0-9_]*)?",
+      "captures": {
+        "3": {
+          "name": "entity.name.tag.encoding.ax65"
+        }
+      }
+    },
+    "label": {
+      "name": "entity.name.label.ax65",
+      "match": "'[A-Za-z_][A-Za-z0-9_]*\\b(?!')"
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.ax65",
+          "match": "\\$[0-9A-Fa-f_]+\\b|\\b0x[0-9A-Fa-f_]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.ax65",
+          "match": "\\b0b[01_]+\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.ax65",
+          "match": "\\b[0-9][0-9_]*(\\.[0-9]+)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.ax65",
+          "match": "\\b(if|else|match|loop|while|for|in|break|continue|return)\\b"
+        },
+        {
+          "name": "keyword.other.ax65",
+          "match": "\\b(as|const|enum|extern|fn|impl|let|pub|static|struct|type|unsafe|use|range|flags|fnset|interface|io|shared|init|comptime|asm|atomic|cycles|io_span|max_cycles)\\b"
+        },
+        {
+          "name": "keyword.other.target.ax65",
+          "match": "\\b(target|extends|region|reserve|place|encoding|bind|project|never|halt)\\b"
+        },
+        {
+          "name": "invalid.illegal.reserved.ax65",
+          "match": "\\b(mut)\\b"
+        },
+        {
+          "name": "constant.language.ax65",
+          "match": "\\b(true|false|Some|None)\\b"
+        },
+        {
+          "name": "support.function.builtin.ax65",
+          "match": "\\b(irq_enable|irq_disable|wait_interrupt|delay|size_of|include_bin|target|build|Cpu|sin|cos|sqrt|round|floor|abs|PI|core)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.builtin.ax65",
+          "match": "\\b(u8|i8|u16|i16|u24|i24|u32|i32|bool|char|str|zstr|histr|bcd8|bcd16|bcd32|ptr|strbuf|int|real|Option)\\b"
+        },
+        {
+          "name": "entity.name.type.ax65",
+          "match": "\\b[A-Z][a-z0-9]+[A-Za-z0-9]*\\b"
+        }
+      ]
+    },
+    "paths": {
+      "name": "constant.other.const.ax65",
+      "match": "\\b[A-Z][A-Z0-9_]+\\b"
+    },
+    "asm": {
+      "name": "meta.embedded.block.asm6502.ax65",
+      "begin": "\\b(unsafe\\s+)?asm\\b[^{\\n]*\\{\\s*$",
+      "beginCaptures": {
+        "0": {
+          "name": "keyword.other.asm.ax65"
+        }
+      },
+      "end": "^\\s*\\}",
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.asm6502",
+          "match": ";.*$"
+        },
+        {
+          "name": "variable.other.ax65-ref.asm6502",
+          "match": "\\{[A-Za-z_][A-Za-z0-9_.:]*\\}"
+        },
+        {
+          "name": "entity.name.label.asm6502",
+          "match": "^\\s*[@A-Za-z_][A-Za-z0-9_]*:"
+        },
+        {
+          "name": "keyword.mnemonic.asm6502",
+          "match": "(?i)\\b(adc|and|asl|bbr0|bbr1|bbr2|bbr3|bbr4|bbr5|bbr6|bbr7|bbs0|bbs1|bbs2|bbs3|bbs4|bbs5|bbs6|bbs7|bcc|bcs|beq|bit|bmi|bne|bpl|bra|brk|bvc|bvs|clc|cld|cli|clv|cmp|cpx|cpy|dec|dex|dey|eor|inc|inx|iny|jmp|jsr|lda|ldx|ldy|lsr|nop|ora|pha|php|phx|phy|pla|plp|plx|ply|rmb0|rmb1|rmb2|rmb3|rmb4|rmb5|rmb6|rmb7|rol|ror|rti|rts|sbc|sec|sed|sei|smb0|smb1|smb2|smb3|smb4|smb5|smb6|smb7|sta|stp|stx|sty|stz|tax|tay|trb|tsb|tsx|txa|txs|tya|wai|smc)\\b"
+        },
+        {
+          "name": "constant.numeric.asm6502",
+          "match": "#?\\$[0-9A-Fa-f]+|#?\\b0x[0-9A-Fa-f]+\\b|#?\\b0b[01]+\\b|#?\\b[0-9]+\\b"
+        }
+      ]
+    }
+  }
+}

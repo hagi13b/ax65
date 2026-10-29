@@ -1,0 +1,39 @@
+{
+  "name": "ax65",
+  "displayName": "AX65",
+  "description": "AX65 言語（6502 用）のシンタックスハイライト",
+  "version": "1.0.0",
+  "publisher": "ax65",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ax65",
+        "aliases": [
+          "AX65",
+          "ax65"
+        ],
+        "extensions": [
+          ".ax65",
+          ".target"
+        ],
+        "filenames": [
+          "ax65.proj"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ax65",
+        "scopeName": "source.ax65",
+        "path": "./syntaxes/ax65.tmLanguage.json"
+      }
+    ]
+  }
+}

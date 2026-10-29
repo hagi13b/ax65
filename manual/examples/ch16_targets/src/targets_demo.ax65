@@ -1,0 +1,70 @@
+// src/targets_demo.ax65 — ターゲット定義を読む：同じソースを v2・v2x・v3 でビルドする
+use lib::out::{print, newline, print_u8, print_u16};   // 出力の関数を名前だけで使う
+#[allow(unused_imports)]                // 音のないターゲットでは使わない
+use hw::hexmon;                         // モニタの API（音の長さを待つのに使う）
+#[allow(unused_imports)]                // 画面のないターゲットでは使わない
+use screen;                             // v3 だけにある画面（v2・v2x では bind されていない）
+#[allow(unused_imports)]                // 音のないターゲットでは使わない
+use sound;                              // v2x だけにある音（v2・v3 では bind されていない）
+
+const CLOCK_KHZ: u16 = (target.clock / 1000) as u16;  // ターゲット定義のクロック（コンパイル時の値）
+
+comptime if target.has(screen) {        // 画面がある構成は、画面の 1 行の文字数ぶん
+    const LINE_LEN: u8 = target.SCREEN_WIDTH;   // v3 だけにある定数（40）
+} else {                                // 画面がない構成は、7 セグメント LED の桁数ぶん
+    const LINE_LEN: u8 = target.LED_DIGITS;     // v2 の定数（6）。v2x・v3 も引き継いでいる
+}
+static LINE: [u8; LINE_LEN] = [0; LINE_LEN];    // 長さはコンパイル時に決まる
+
+fn show_on_screen() {                   // 画面がある構成だけで使う関数
+    comptime if target.has(screen) {
+        screen::clear();
+        let x = 0;
+        for c in p"HELLO, SCREEN"@screen {      // 変換表で画面用の文字にした文字列
+            screen::put(x, 0, c);       // 1 文字ずつ右へ並べる
+            x += 1;
+        }
+    }
+}
+
+fn beep() {                             // 音がある構成だけで鳴らす
+    comptime if target.has(sound) {
+        sound::tone((target.clock / 2000 - 2) as u16);  // 1000Hz（周期はクロックからコンパイル時に計算する）
+        hexmon::delay_10ms(10);         // 0.1 秒待つ
+        sound::off();
+    }
+}
+
+fn main() {
+    print(p"CLOCK ");
+    print_u16(CLOCK_KHZ);
+    print(p" KHZ, LINE ");
+    print_u8(LINE.len());               // 配列の長さ（コンパイル時の定数）
+    newline();
+
+    comptime if target.has_irq {        // irq が none でないターゲットだけ
+        print(p"IRQ: YES");
+    } else {
+        print(p"IRQ: NO");
+    }
+    newline();
+
+    comptime if target.has(screen) {    // 画面が bind されているターゲットだけ
+        print(p"THIS TARGET HAS A SCREEN");
+        show_on_screen();
+    } else {
+        print(p"NO SCREEN ON THIS TARGET");
+    }
+    newline();
+
+    comptime if target.has(sound) {     // 音が bind されているターゲットだけ
+        print(p"BEEP");
+        newline();
+    }
+    beep();
+
+    comptime if build.debug {           // ax65 build -D debug のときだけ
+        print(p"(DEBUG BUILD)");
+        newline();
+    }
+}

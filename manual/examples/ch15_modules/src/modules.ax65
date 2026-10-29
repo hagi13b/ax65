@@ -1,0 +1,18 @@
+// src/modules.ax65 — モジュール：lib/out と lib/rng を use して使う
+use lib::out;                           // lib/out.ax65 を読み込む。out::print() のように使う
+use lib::out::{print, newline};         // よく使う 2 つは名前だけで使えるようにする
+use lib::rng as r;                      // 別名を付ける（r::next()）
+
+fn main() {
+    print(p"8 RANDOM NUMBERS:");
+    newline();
+    r::seed(7);                         // 種を決める
+    for i in 0..8 {
+        out::print_u8(i);               // 番号
+        print(p": $");
+        out::print_hex8(r::next());     // 16 進で表示する
+        print(p"  DICE ");
+        out::print_u8(r::below(8) + 1); // 1〜8
+        newline();
+    }
+}

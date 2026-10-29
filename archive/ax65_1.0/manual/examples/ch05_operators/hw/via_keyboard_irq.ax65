@@ -1,0 +1,47 @@
+// hw/via_keyboard_irq.ax65 — keyboard インターフェースの、割り込みを使う実装（VIA3 の CA1 で IRQ）
+//   キーが押されるたびに IRQ 処理が文字をリングバッファに入れ、poll() はそこから取り出す。
+//   この実装を bind したプログラムは、main で irq_enable() を呼ぶ。
+//   この実装は IRQ 処理を持つので、IRQ 処理を自分で書くプログラムとは組み合わせない。
+
+flags ViaIfr { Ca2, Ca1, Shift, Cb2, Cb1, T2, T1, Any }    // VIA の割り込みフラグ（ビット0〜7）
+
+range Kpos = 0..16;                                 // バッファの位置（0〜15）
+shared(irq)  KEYBUF: [u8; Kpos] = [0; Kpos];        // 書き込むのは IRQ 処理だけ
+shared(irq)  HEAD: Kpos = 0;                        // 次に書く位置（IRQ 処理が進める）
+shared(main) TAIL: Kpos = 0;                        // 次に読む位置（メインが進める）
+
+impl keyboard {
+    io(in)  ORA:  u8     @ $6201;       // ポートA（読むと CA1 のフラグが消える）
+    io(out) DDRA: u8     @ $6203;       // ポートA の向き
+    io(out) ACR:  u8     @ $620B;       // 補助制御レジスタ
+    io(out) PCR:  u8     @ $620C;       // 周辺制御レジスタ
+    io(in)  IFR:  ViaIfr @ $620D;       // 割り込みフラグ
+    io(out) IER:  u8     @ $620E;       // 割り込みの許可・禁止
+
+    init {
+        DDRA = $00;                     // ポートA はすべて入力
+        PCR  = $01;                     // CA1 は立ち上がりで反応する
+        ACR  = $01;                     // ポートA をラッチする
+        IER  = $7F;                     // いったんすべて禁止してから
+        IER  = $82;                     // CA1 の割り込みだけを許可する（ビット7 = 1 は「許可」）
+    }
+
+    #[interrupt(irq)]
+    fn on_key_irq() {                   // インターフェースにない関数：このモジュールの中だけ
+        if IFR.contains(ViaIfr::Ca1) {  // キーによる割り込みか
+            let c = ORA & $7F;          // 文字を読む（読むと割り込みの原因が消える）
+            let next = Kpos::wrap(HEAD as u8 + 1);  // 次の位置（15 の次は 0）
+            if next != TAIL {           // 満杯でなければ
+                KEYBUF[HEAD] = c;       // データを書いてから
+                HEAD = next;            // 位置を進める
+            }
+        }
+    }
+
+    fn poll() -> Option<char> {         // バッファに文字があれば 1 つ取り出す
+        if TAIL == HEAD { return None; }    // 空
+        let c = KEYBUF[TAIL];           // 1 バイトの要素なので、そのまま読める
+        TAIL = Kpos::wrap(TAIL as u8 + 1);  // 書き込むのはメインだけ、1 バイト → atomic は不要
+        Some(c as char)
+    }
+}

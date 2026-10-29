@@ -1,0 +1,22 @@
+// hw/frame_timer.ax65 — GPIO（6522 互換）のタイマー T2 で 1/60 秒を計る（仕様書 1.1）
+//   v2 には割り込みがないので、T2 をワンショットで動かし、IFR のビット5 を見て待つ。
+//   T1 と ACR はモニタの時間待ちが使っている（ターゲット定義で reserve されている）。
+
+flags Ifr { Ca2, Ca1, Shift, Cb2, Cb1, T2, T1, Any }   // 6522 の割り込みフラグ（ビット0〜7）
+
+io      T2C_L: u8  @ $8008;             // 書く：T2 の初期値の下位。読む：T2 のフラグが消える
+io(out) T2C_H: u8  @ $8009;             // T2 の初期値の上位（書くと数え始める）
+io(in)  IFR:   Ifr @ $800D;             // 割り込みフラグ（割り込みは起こさず、フラグだけを見る）
+
+comptime assert(target.clock / 60 <= 65535, "クロックが速すぎて、1/60 秒が 16 ビットに収まらない");
+const PERIOD: u16 = (target.clock / 60 - 2) as u16;   // v2 では 30706
+
+pub fn start() {                        // 1/60 秒を数え始める
+    T2C_L = (PERIOD & $FF) as u8;       // 下位を先に書く（I/O の順序はソースどおりに守られる）
+    T2C_H = (PERIOD >> 8) as u8;        // 上位を書くと数え始める
+}
+
+pub fn wait() {                         // start() から 1/60 秒たつまで待つ
+    while !IFR.contains(Ifr::T2) { }
+    let _ = T2C_L;                      // 読み捨てて T2 のフラグを消す（bit 命令で読む）
+}

@@ -1,0 +1,5 @@
+// hw/hexmon.ax65 — HEXMON の API（仕様書 1.1 7.6節。meteor7 で使う分だけ）
+//   使うスタックはガイドに書かれていないので、多めに見積もっている。
+
+pub extern fn delay_ms(ms: u8 in A)     // DELAY_MS：A ミリ秒待つ（0 は 256）
+    @ $FF09 clobbers(A, flags) stack(4);

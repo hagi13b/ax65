@@ -1,0 +1,10 @@
+// ax65.proj — meteor7（7セグメント版）のプロジェクトの設定（仕様書 1.1 17.2節）
+project meteor7 {
+    main       = "src/meteor7.ax65";    // main を含むファイル
+    paths      = ["."];                 // use でモジュールを探す場所
+    target_dir = "targets";             // ターゲット定義を探す場所
+    targets    = [v2];                  // 実機だけ
+    default    = v2;                    // -t を省略したときのターゲット
+    opt        = O2;                    // 大きさ優先（手で打ち込むので小さい方がよい）
+    out_dir    = "build";               // 出力先
+}

@@ -1,0 +1,155 @@
+{
+ "same_output": true,
+ "output_tail": "E 0072\rSCORE 0072\rGAME OVER  SCORE 0072\r",
+ "output_len": 6625,
+ "meteor_O0": {
+  "frames": 600,
+  "startup_cycles": 1962,
+  "code_bytes": 581,
+  "const_bytes": 47,
+  "ram_bytes": 40,
+  "irq_count": 600,
+  "irq_avg": 38.0,
+  "irq_max": 43,
+  "input_min_avg_max": [
+   41,
+   41.8,
+   102
+  ],
+  "update_min_avg_max": [
+   307,
+   360.4,
+   828
+  ],
+  "draw_min_avg_max": [
+   614,
+   614,
+   614
+  ],
+  "frame_min_avg_max": [
+   962,
+   1016.2,
+   1483
+  ]
+ },
+ "meteor_O1": {
+  "frames": 600,
+  "startup_cycles": 1368,
+  "code_bytes": 433,
+  "const_bytes": 47,
+  "ram_bytes": 0,
+  "irq_count": 600,
+  "irq_avg": 37.0,
+  "irq_max": 41,
+  "input_min_avg_max": [
+   9,
+   9.4,
+   41
+  ],
+  "update_min_avg_max": [
+   201,
+   246.0,
+   510
+  ],
+  "draw_min_avg_max": [
+   553,
+   553,
+   553
+  ],
+  "frame_min_avg_max": [
+   763,
+   808.4,
+   1072
+  ]
+ },
+ "meteor_O2": {
+  "frames": 600,
+  "startup_cycles": 1343,
+  "code_bytes": 386,
+  "const_bytes": 47,
+  "ram_bytes": 0,
+  "irq_count": 600,
+  "irq_avg": 37.0,
+  "irq_max": 41,
+  "input_min_avg_max": [
+   9,
+   9.4,
+   41
+  ],
+  "update_min_avg_max": [
+   186,
+   232.6,
+   547
+  ],
+  "draw_min_avg_max": [
+   498,
+   498,
+   498
+  ],
+  "frame_min_avg_max": [
+   693,
+   740.0,
+   1054
+  ]
+ },
+ "meteor_Os": {
+  "frames": 600,
+  "startup_cycles": 1247,
+  "code_bytes": 426,
+  "const_bytes": 47,
+  "ram_bytes": 0,
+  "irq_count": 600,
+  "irq_avg": 37.0,
+  "irq_max": 41,
+  "input_min_avg_max": [
+   10,
+   10.4,
+   41
+  ],
+  "update_min_avg_max": [
+   186,
+   231.1,
+   499
+  ],
+  "draw_min_avg_max": [
+   487,
+   487,
+   487
+  ],
+  "frame_min_avg_max": [
+   683,
+   728.6,
+   996
+  ]
+ },
+ "meteor_hand": {
+  "frames": 600,
+  "startup_cycles": 1106,
+  "code_bytes": 313,
+  "const_bytes": 47,
+  "ram_bytes": 0,
+  "irq_count": 600,
+  "irq_avg": 34.0,
+  "irq_max": 34,
+  "input_min_avg_max": [
+   9,
+   9.4,
+   35
+  ],
+  "update_min_avg_max": [
+   185,
+   231.0,
+   526
+  ],
+  "draw_min_avg_max": [
+   484,
+   484,
+   484
+  ],
+  "frame_min_avg_max": [
+   678,
+   724.3,
+   1019
+  ]
+ }
+}

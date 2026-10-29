@@ -1,0 +1,68 @@
+// src/option.ax65 — Option と ?：数字を読んで、足し算と割り算をする
+use console;                            // 1 文字の入出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+use core::{divmod8, Nz8};               // 割り算と、0 でない値の型
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+fn digit_value(c: char) -> Option<u8> { // 数字なら 0〜9、数字でなければ None
+    if c >= '0' && c <= '9' { Some(c as u8 - '0' as u8) } else { None }
+}
+
+fn read_number() -> Option<u8> {        // Enter までの数字を 0〜255 の数にする
+    let n: u8 = 0;
+    let count = 0;                      // 読んだ桁数
+    loop {
+        let c = console::getc();
+        console::putc(c);               // エコー
+        if c == '\r' { break; }
+        let d = digit_value(c)?;        // 数字でなければ、この関数も None を返して抜ける
+        if n > 25 { return None; }      // 10 倍すると 255 を超える
+        n = (n * 10).checked_add(d)?;   // 足してあふれたら None
+        count += 1;
+    }
+    console::putc('\n');
+    if count == 0 { None } else { Some(n) }     // 1 桁もなければ None
+}
+
+fn ask(label: str) -> Option<u8> {      // 聞いて読む
+    print(label);
+    read_number()
+}
+
+struct Pair { a: u8, b: u8 }            // 読んだ 2 つの数
+
+fn read_pair() -> Option<Pair> {        // 2 つ読む。どちらかが数でなければ None
+    let a = ask(p"A = ")?;              // None ならここで None を返して抜ける
+    let b = ask(p"B = ")?;
+    Some(Pair { a: a, b: b })
+}
+
+fn calc(a: u8, b: u8) {                 // 足し算と割り算の結果を出す
+    print(p"A + B = ");
+    if let Some(s) = a.checked_add(b) { print_u8(s); } else { print(p"OVERFLOW"); }
+    newline();
+    print(p"A / B = ");
+    if let Some(d) = Nz8::check(b) {  // 0 でなければ Nz8 になる
+        let qr = divmod8(a, d);
+        print_u8(qr.q);
+        print(p" REMAINDER ");
+        print_u8(qr.r);
+    } else {
+        print(p"CANNOT DIVIDE BY 0");
+    }
+    newline();
+}
+
+fn main() {
+    print(p"TYPE NUMBERS 0-255. ANYTHING ELSE TO QUIT.");
+    newline();
+    loop {
+        match read_pair() {
+            Some(v) => calc(v.a, v.b),
+            None    => { print(p"BYE"); newline(); break; }
+        }
+    }
+}

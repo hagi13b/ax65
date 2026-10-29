@@ -1,0 +1,4 @@
+// <ax65>/std/keyboard.ax65 — キーボードのインターフェース（仕様書 1.1 20.4節）
+interface keyboard {
+    fn poll() -> Option<char>;          // 押されていれば返す。待たない
+}

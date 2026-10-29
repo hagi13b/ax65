@@ -1,0 +1,5 @@
+// <ax65>/std/timer.ax65 — タイマーのインターフェース（仕様書 1.1 20.4節）
+interface timer {
+    fn ticks() -> u16;                  // 起動からの時間（実装ごとの単位）
+    const TICKS_PER_SECOND: u16;
+}

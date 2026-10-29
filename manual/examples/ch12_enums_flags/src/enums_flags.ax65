@@ -1,0 +1,84 @@
+// src/enums_flags.ax65 — 列挙型とビットフラグ：信号機の状態と、設定のスイッチ
+use console;                            // 1 文字の入出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+enum Light { Red, Green, Yellow }       // Red = 0、Green = 1、Yellow = 2
+
+const WAIT_SEC: [u8; Light] = [3, 3, 1];    // 0 から連続した列挙型は配列の添字になる
+
+fn next(l: Light) -> Light {            // 次の色
+    match l {                           // すべての値を書かないとエラー
+        Light::Red    => Light::Green,
+        Light::Green  => Light::Yellow,
+        Light::Yellow => Light::Red,
+    }
+}
+
+fn name(l: Light) -> str {              // 色の名前
+    match l {
+        Light::Red    => p"RED",
+        Light::Green  => p"GREEN",
+        Light::Yellow => p"YELLOW",
+    }
+}
+
+flags Opt { Sound, Fast, Debug }        // Sound = ビット0、Fast = ビット1、Debug = ビット2
+
+static OPTS: Opt = Opt::Sound;          // はじめは Sound だけ立っている
+
+fn show_opts() {                        // 立っているビットの名前を出す
+    print(p"OPTIONS:");
+    if OPTS.contains(Opt::Sound) { print(p" SOUND"); }
+    if OPTS.contains(Opt::Fast)  { print(p" FAST"); }
+    if OPTS.contains(Opt::Debug) { print(p" DEBUG"); }
+    print(p"  (RAW ");
+    print_u8(OPTS as u8);               // ビットフラグ → u8
+    print(p")");
+    newline();
+}
+
+fn main() {
+    for l in Light {                    // 列挙型のすべての値を回す
+        print(name(l));
+        print(p" ");
+        print_u8(WAIT_SEC[l]);
+        print(p" SEC");
+        newline();
+    }
+
+    let l = Light::Red;
+    let steps: u8 = 6;
+    while steps > 0 {                   // 6 回、色を進める
+        print(name(l));
+        print(p" -> ");
+        l = next(l);
+        steps -= 1;
+    }
+    print(name(l));
+    newline();
+
+    if let Some(c) = Light::check(2) {  // u8 から列挙型へは check（as ではできない）
+        print(p"LIGHT 2 IS ");
+        print(name(c));
+        newline();
+    }
+
+    print(p"KEYS 1-3 TOGGLE OPTIONS, Q TO QUIT");
+    newline();
+    show_opts();
+    loop {
+        let c = console::getc();
+        match c {
+            '1'       => OPTS.toggle(Opt::Sound),   // ビットを反転する
+            '2'       => OPTS.toggle(Opt::Fast),
+            '3'       => OPTS.toggle(Opt::Debug),
+            'Q' | 'q' => { break; }
+            _         => {}
+        }
+        show_opts();
+    }
+}

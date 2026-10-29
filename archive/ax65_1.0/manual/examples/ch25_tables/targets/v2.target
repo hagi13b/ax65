@@ -1,0 +1,27 @@
+// targets/v2.target — この本の例のマシン v2（シリアル端末＋キーボード＋音のボード）
+target v2 {
+    cpu          = Cpu::W65C02S;        // CPU の品種
+    clock        = 1_000_000;           // 1MHz
+    stack        = 128;                 // ハードウェアスタックの予算（バイト）
+    run          = ram;                 // RAM に読み込んで実行する
+    load         = $0300;               // 読み込み先（Wozmon から 300R で実行する）
+    exit         = monitor($FF1F);      // main が終わったらモニタへ戻る
+    irq          = indirect($0280);     // モニタの ROM が jmp ($0280) で IRQ 処理へ飛ぶ
+    nmi          = indirect($0282);     // 同じく NMI（NMI ボタン）
+    irq_interval = 16_666;              // IRQ の最短の間隔（サイクル）。1/60 秒
+
+    region zp    = $00..=$EF;           // ゼロページのうち使ってよい範囲
+    region stack = $0100..=$01FF;       // ハードウェアスタック
+    region ram   = $0200..=$1FFF;       // RAM 8KB
+    region io    = $6000..=$8FFF;       // VIA1（$6000）、VIA2（$6100）、VIA3（$6200）、ACIA（$8000）
+    reserve $24..=$2B;                  // Wozmon が使うゼロページ
+    reserve $0200..=$0283;              // Wozmon の入力バッファと、IRQ・NMI のベクタ
+
+    output = [woz, bin, sym, lst];      // 既定で出力する形式
+
+    bind console  = hw::acia_console;   // 1 文字の入出力は ACIA（シリアル端末）
+    bind keyboard = hw::via_keyboard;   // ASCII キーボード（VIA3 のポートA）
+    bind sound    = hw::via_sound;      // 音（VIA2 のタイマー1 で PB7 から方形波）
+
+    const RAM_KB: u8 = 8;               // コードを伴わない性質：RAM の大きさ（KB）
+}

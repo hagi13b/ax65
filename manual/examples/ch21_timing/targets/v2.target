@@ -1,0 +1,23 @@
+// targets/v2.target — 実機 v2：6502-CPLD ボード＋HEXPAD（モニタ HEXMON）。仕様書 16.7節の v2 と同じ
+target v2 {
+    cpu   = Cpu::W65C02S;               // CPU の品種
+    clock = 1_842_500;                  // クロック（約 1.8425MHz）
+    stack = 128;                        // スタックの予算（モニタが積んだ分を除いた、プログラムが使える量）
+    run   = ram;                        // RAM に読み込んで実行する
+    load  = $0200;                      // HEXMON で 0200 を表示して JMP キーで実行する
+    exit  = rts;                        // rts でモニタへ戻る
+    irq   = none;                       // 割り込みは使えない
+    nmi   = none;                       // NMI もつながっていない
+    region zp    = $20..=$FF;           // $00〜$1F はモニタが使う
+    region stack = $0100..=$01FF;       // モニタと共用
+    region ram   = $0200..=$7EFF;       // プログラムとデータを置ける RAM
+    region io    = [$8000..=$800F,      // GPIO（6522 互換）
+                    $8400..=$8403,      // UART（6551 互換）
+                    $8800..=$880F];     // HEXPAD（表示とキー）
+    reserve $8004..=$8007;              // T1（モニタの時間待ちが使う）
+    reserve $800B;                      // ACR（同じ）
+    output = [woz, bin, sym, lst];      // woz：HEXMON に打ち込むダンプ
+    bind console  = hw::acia_console;   // 1 文字の入出力は UART（シリアル端末）
+    bind keyboard = hw::hexmon_keyboard;    // キーボードは HEXPAD のキー（HEXMON の POLL_KEY）
+    const LED_DIGITS: u8 = 6;           // 7 セグメント LED の桁数
+}

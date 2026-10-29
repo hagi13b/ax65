@@ -1,0 +1,32 @@
+// hw/hexpad.ax65 — HEXPAD（7セグメント LED 6 桁とキー 20 個）（仕様書 1.1。meteor7 で使う分だけ）
+//   HP_KEY：ビット7 が「新しく押されたキーあり」、ビット4〜0 がキーコード。読むとビット7 が消える。
+//   HP_DIGIT0〜5：1 桁ずつ表示コード（0〜31）を書く（HP_DIGIT0 が右端、HP_DIGIT5 が左端）。
+
+pub range Digit = 0..6;                 // 桁の位置（0 = 右端 … 5 = 左端）
+
+io(in)  HP_KEY:   u8          @ $8800;  // キーのレジスタ（読むのは poll_key の 1 か所だけにする）
+io(out) HP_DIGIT: [u8; Digit] @ $8808;  // 1 桁ずつの表示（$8808〜$880D）
+
+pub const MINUS:  u8 = 16;              // 表示コード：-（真ん中の横線）
+pub const BLANK:  u8 = 20;              // 表示コード：空白
+pub const SMALL_O: u8 = 0;              // 表示コード：o の形（下半分の四角）
+pub const SMALL_U: u8 = 31;             // 表示コード：u の形
+
+pub fn poll_key() -> Option<u8> {       // 新しく押されたキーがあればキーコードを返す。待たない
+    let k = HP_KEY;                     // 1 回だけ読む（2 回読むと、2 回目はビット7 が消えている）
+    if k & $80 == 0 { return None; }    // 新しいキーはない
+    Some(k & $1F)                       // キーコード（0〜F のキーは $00〜$0F、JMP $11、A/D $12、INC $13）
+}
+
+#[inline]
+pub fn show(d: Digit, code: u8) {       // 1 桁に表示コードを書く（1 命令なので、呼んだ場所に展開する）
+    HP_DIGIT[d] = code;
+}
+
+pub fn show_bcd(v: bcd16) {             // 右の 4 桁に、10進 4 桁を表示する（表示コード 0〜9 は数字そのもの）
+    let p: u8 = 4;
+    for d in v.digits() {               // 上の桁から 1 桁ずつ（0〜9）
+        p -= 1;
+        if let Some(pos) = Digit::check(p) { HP_DIGIT[pos] = d; }
+    }
+}

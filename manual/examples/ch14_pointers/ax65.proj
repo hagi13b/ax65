@@ -1,0 +1,19 @@
+// ax65.proj — ch14_pointers のプロジェクトファイル
+project pointers {
+    main       = "src/pointers.ax65";   // main を含むファイル
+    paths      = ["."];                 // use でモジュールを探す場所（最後に標準ライブラリを探す）
+    target_dir = "targets";             // ターゲット定義を探す場所
+    targets    = [v2];                  // ax65 check --all-targets の対象
+    default    = v2;                    // -t を省略したときのターゲット
+    opt        = O2;                    // -O を省略したときの最適化の段階（大きさ優先）
+    out_dir    = "build";               // 出力先（build/<ターゲット名>/）
+
+    lints {                             // 警告の扱い（allow / warn / deny）
+        naming         = warn;          // 名前の慣習
+        unused_imports = warn;          // 使っていない use
+    }
+    fmt {                               // ax65 fmt の書き方
+        hex   = dollar;                 // 16 進は $FF
+        array = rust;                   // 配列の型は [T; N]
+    }
+}

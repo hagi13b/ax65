@@ -1,0 +1,44 @@
+// <ax65>/std/bcd.ax65 — BCD と整数の変換（仕様書 1.0 20.3節）
+
+pub fn to_u8(x: bcd8) -> u8 {
+    let d = x.digits();
+    d[0] * 10 + d[1]
+}
+
+pub fn to_u16(x: bcd16) -> u16 {
+    let d = x.digits();
+    (d[0] as u16) * 1000 + (d[1] as u16) * 100 + (d[2] as u16) * 10 + (d[3] as u16)
+}
+
+pub fn to_u32(x: bcd32) -> u32 {
+    let d = x.digits();
+    let r: u32 = 0;
+    for k in d {
+        r = r * 10 + (k as u32);
+    }
+    r
+}
+
+// 整数を BCD にする（3 桁）
+pub fn from_u8(n: u8) -> bcd16 {
+    let r: bcd16 = 0;
+    let x = n;
+    for _i in 0..8 {
+        r += r;
+        if x & $80 != 0 { r += 1; }
+        x = x << 1;
+    }
+    r
+}
+
+// 整数を BCD にする（5 桁）
+pub fn from_u16(n: u16) -> bcd32 {
+    let r: bcd32 = 0;
+    let x = n;
+    for _i in 0..16 {
+        r += r;
+        if x & $8000 != 0 { r += 1; }
+        x = x << 1;
+    }
+    r
+}

@@ -1,0 +1,49 @@
+// src/debug_demo.ax65 — デバッグのこつ：-D debug で入る記録、LED のチェックポイント、comptime assert
+use lib::out::{print, newline, print_u8};  // 端末への出力
+#[allow(unused_imports)]                // -D debug なしのビルドでは使わないので、警告を止める
+use lib::out::print_hex8;
+use hw::leds;                           // LED（どこまで進んだかを見る）
+
+comptime if build.debug {               // ax65 build -D debug のときだけ、記録を出す
+    fn trace(tag: str, v: u8) {
+        print(p"[DBG] ");
+        print(tag);
+        print(p" = $");
+        print_hex8(v);
+        newline();
+    }
+} else {
+    #[allow(unused_variables)]          // 引数を使わないが、警告を止める
+    fn trace(tag: str, v: u8) { }       // 何もしない（中身がないので、呼び出しのコストもほぼない）
+}
+
+range Di = 0..8;                        // データの番号
+const DATA: [u8; Di] = [12, 200, 7, 99, 150, 3, 201, 64];
+
+comptime assert(DATA.len() == 8, "DATA は 8 個のはず");   // 前提をコンパイル時に確かめる
+
+fn checkpoint(n: u8) {                  // LED に番号を出す（止まった場所がわかる）
+    leds::show(n);
+}
+
+fn find_max() -> u8 {                   // 最大値を探す
+    let m = 0;
+    for i in Di {
+        if DATA[i] > m {
+            m = DATA[i];
+            trace(p"NEW MAX", m);       // 途中の値を記録する（-D debug のときだけ）
+        }
+    }
+    m
+}
+
+fn main() {
+    checkpoint(1);
+    let m = find_max();
+    checkpoint(2);
+    print(p"MAX = ");
+    print_u8(m);
+    newline();
+    trace(p"RESULT", m);
+    checkpoint(3);
+}

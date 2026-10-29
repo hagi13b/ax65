@@ -1,0 +1,31 @@
+// hw/via_keyboard.ax65 — keyboard インターフェースの実装：VIA3（$6200）のポートA につないだ ASCII キーボード
+//   キーを押すと PA0〜PA6 に ASCII コード、CA1 に短いパルス（ストローブ）が来る。
+//   ACR のビット0 を 1 にすると、CA1 のパルスの瞬間のポートA の値が保たれる（ラッチ）。
+//   CA1 のパルスが来ると IFR のビット1 が立ち、ポートA を読むと消える。
+//   この実装は割り込みを使わず、poll() のたびに IFR を調べる。
+
+flags ViaIfr { Ca2, Ca1, Shift, Cb2, Cb1, T2, T1, Any }    // VIA の割り込みフラグ（ビット0〜7）
+
+impl keyboard {
+    io(in)  ORA:  u8     @ $6201;       // ポートA（読むと CA1 のフラグが消える）
+    io(out) DDRA: u8     @ $6203;       // ポートA の向き（0 = 入力）
+    io(out) ACR:  u8     @ $620B;       // 補助制御レジスタ
+    io(out) PCR:  u8     @ $620C;       // 周辺制御レジスタ（CA1 の向き）
+    io(in)  IFR:  ViaIfr @ $620D;       // 割り込みフラグ
+    io(out) IER:  u8     @ $620E;       // 割り込みの許可・禁止
+
+    init {
+        IER  = $7F;                     // VIA3 の割り込みをすべて禁止する
+        DDRA = $00;                     // ポートA はすべて入力
+        PCR  = $01;                     // CA1 は立ち上がりで反応する
+        ACR  = $01;                     // ポートA をラッチする
+    }
+
+    fn poll() -> Option<char> {         // キーが押されていれば文字を返す。待たない
+        if IFR.contains(ViaIfr::Ca1) {  // ストローブが来たか
+            Some((ORA & $7F) as char)   // 下位 7 ビットが ASCII コード（読むとフラグが消える）
+        } else {
+            None                        // 押されていない
+        }
+    }
+}

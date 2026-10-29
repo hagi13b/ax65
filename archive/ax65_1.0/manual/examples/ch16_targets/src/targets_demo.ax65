@@ -1,0 +1,46 @@
+// src/targets_demo.ax65 — ターゲット定義を読む：同じソースを v2 と v3 でビルドする
+use lib::out::{print, newline, print_u8, print_u16};   // 出力の関数を名前だけで使う
+use screen;                             // v3 だけにある画面（v2 では bind されていない）
+
+const CLOCK_KHZ: u16 = (target.clock / 1000) as u16;  // ターゲット定義のクロック（コンパイル時の値）
+
+comptime if target.RAM_KB >= 16 {       // ターゲット定義の定数で、配列の大きさを変える
+    const HISTORY: u8 = 200;            // RAM が多い構成は、記録を 200 個まで
+} else {
+    const HISTORY: u8 = 20;             // RAM が少ない構成は 20 個まで
+}
+static LOG: [u8; HISTORY] = [0; HISTORY];   // 長さはコンパイル時に決まる
+
+fn show_on_screen() {                   // 画面がある構成だけで使う関数
+    comptime if target.has(screen) {
+        screen::clear();
+        let x = 0;
+        for c in p"HELLO, SCREEN"@screen {      // 変換表で画面用の文字にした文字列
+            screen::put(x, 0, c);       // 1 文字ずつ右へ並べる
+            x += 1;
+        }
+    }
+}
+
+fn main() {
+    print(p"CLOCK ");
+    print_u16(CLOCK_KHZ);
+    print(p" KHZ, RAM ");
+    print_u8(target.RAM_KB);
+    print(p" KB, LOG SIZE ");
+    print_u8(LOG.len());                // 配列の長さ（コンパイル時の定数）
+    newline();
+
+    comptime if target.has(screen) {    // 画面が bind されているターゲットだけ
+        print(p"THIS TARGET HAS A SCREEN");
+        show_on_screen();
+    } else {
+        print(p"NO SCREEN ON THIS TARGET");
+    }
+    newline();
+
+    comptime if build.debug {           // ax65 build -D debug のときだけ
+        print(p"(DEBUG BUILD)");
+        newline();
+    }
+}

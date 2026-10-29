@@ -1,0 +1,39 @@
+// hw/user_io.ax65 — CPU 基板のユーザー LED（D0〜D3）とユーザースイッチ（S0〜S3）
+//   GPIO（6522 互換）のポートA：PA7〜PA4 が LED（1 で点灯。シルクの D0 が PA7、D3 が PA4）、
+//   PA3〜PA0 がスイッチ（S0 が PA0。押すと 0）。LED とスイッチは同じレジスタ ORA にあるので、このモジュールが両方を持つ。
+//   スイッチを押している間は、LED に CPU のアドレスが出る（基板のデバッグ用の表示）。
+//   HEXMON は起動したとき（RST を含む）に ORA と DDRA を 0 に戻す。
+
+pub flags Pa { S0, S1, S2, S3, D3, D2, D1, D0 }    // ポートA のビット0〜7（S0 = ビット0 … D0 = ビット7）
+
+io(rmw) ORA:  Pa @ $8001;               // ポートA（読み直しても安全なので RMW 命令を許す）
+io(out) DDRA: u8 @ $8003;               // ポートA の向き（1 = 出力）
+
+init {
+    ORA  = $00 as Pa;                   // はじめは LED を全部消す
+    DDRA = $F0;                         // PA7〜PA4（LED）を出力、PA3〜PA0（スイッチ）を入力にする
+}
+
+pub fn leds(v: u8) {                    // v の下位 4 ビットを LED に出す（ビット3 が D0、ビット0 が D3）
+    ORA = (v << 4) as Pa;               // 上位 4 ビットへずらして書く（入力のビットに書いた値は使われない）
+}
+
+pub fn led_on(l: Pa) {                  // 指定した LED をつける（tsb 命令になる）
+    ORA.insert(l);
+}
+
+pub fn led_off(l: Pa) {                 // 指定した LED を消す（trb 命令になる）
+    ORA.remove(l);
+}
+
+pub fn led_toggle(l: Pa) {              // 指定した LED を反転する（lda・eor・sta）
+    ORA.toggle(l);
+}
+
+pub fn switches() -> u8 {               // 押されているスイッチのビットを 1 にして返す（ビット0 が S0 … ビット3 が S3）
+    (!(ORA as u8)) & $0F                // 押すと 0 なので反転し、下位 4 ビットだけを取る
+}
+
+pub fn pressed(s: Pa) -> bool {         // スイッチ s が押されているか
+    !ORA.contains(s)                    // 押すと 0 になる
+}

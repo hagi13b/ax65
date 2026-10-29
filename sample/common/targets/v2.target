@@ -1,0 +1,27 @@
+// targets/v2.target — 実機：6502-CPLD ボード＋HEXPAD（モニタ HEXMON）（仕様書 1.1 16.7節）
+target v2 {
+    cpu   = Cpu::W65C02S;               // CPU の品種
+    clock = 1_842_500;                  // 約 1.8425MHz
+    stack = 128;                        // プログラムが使えるスタックの予算（バイト。モニタと共用）
+    run   = ram;                        // RAM に読み込んで実行する
+    load  = $0200;                      // HEXMON で 0200 を表示して JMP キーで実行する
+    exit  = rts;                        // rts でモニタへ戻る（起動処理はスタックポインタを設定しない）
+    irq   = none;                       // 割り込みは使えない（HEXMON は IRQ ベクタを設定していない）
+    nmi   = none;                       // NMI はつながっていない
+
+    region zp    = $20..=$FF;           // $00〜$1F はモニタが使う
+    region stack = $0100..=$01FF;       // モニタと共用
+    region ram   = $0200..=$7EFF;       // ユーザープログラムとデータ
+    region io    = [$8000..=$800F,      // GPIO（6522 互換）
+                    $8400..=$8403,      // UART（6551 互換）
+                    $8800..=$880F];     // HEXPAD（表示とキー）
+    reserve $8004..=$8007;              // T1（モニタの時間待ちが使う）
+    reserve $800B;                      // ACR（同じ）
+
+    output = [woz, bin, sym, lst];      // woz：HEXMON に打ち込むダンプ
+
+    bind console  = hw::acia_console;   // 1文字の入出力は UART
+    bind keyboard = hw::hexmon_keyboard;    // キーは HEXMON の POLL_KEY
+    const LED_DIGITS: u8 = 6;           // 7セグメント LED の桁数
+    // screen は bind しない → target.has(screen) は false
+}

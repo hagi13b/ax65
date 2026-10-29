@@ -1,0 +1,33 @@
+// src/keyboard_irq.ax65 — 割り込みで読むキーボード：重い処理の間に押したキーも取りこぼさない
+//   ターゲット：v2xk（v2x のキーボードを割り込みの実装に差し替えた仮の構成）。ESC で終わる
+use console;                            // シリアル端末
+use keyboard;                           // v2xk では hw::via_keyboard_irq が bind されている
+use hw::hexmon;                         // モニタの API（時間のかかる処理のかわりに待つ）
+use lib::out::{print, newline};         // 出力の関数
+
+fn busy_work() {                        // 時間のかかる処理のかわり（0.5 秒）
+    hexmon::delay_10ms(50);             // 待っている間も、キーの割り込みは受け付けられる
+}
+
+fn main() {
+    irq_enable();                       // キーボードの IRQ を受け付ける
+    print(p"TYPE FAST. KEYS ARE BUFFERED. ESC TO QUIT.");
+    newline();
+    loop {
+        busy_work();                    // この間に押したキーは、IRQ 処理がバッファにためている
+        console::putc('.');
+        loop {                          // たまっている文字を全部出す
+            match keyboard::poll() {
+                Some(c) => {
+                    if c == '\x1B' {
+                        newline();
+                        irq_disable();  // 割り込みを止めてから終わる
+                        return;
+                    }
+                    console::putc(c);
+                }
+                None => { break; }
+            }
+        }
+    }
+}

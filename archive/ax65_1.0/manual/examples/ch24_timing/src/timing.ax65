@@ -1,0 +1,58 @@
+// src/timing.ax65 — 正確なタイミング：io_span・cycles・max_cycles・delay
+//   VIA1 のポートB の PB0 を「測定用のピン」として使う（ロジックアナライザやオシロスコープで見る）。
+//   このプログラムはポートB を自分で持つので、hw::leds とは一緒に use しない。
+use core::us;                           // マイクロ秒をサイクル数にする
+use lib::out::{print, newline};         // 端末への出力
+
+io(out) ORB:  u8 @ $6000;               // VIA1 ポートB の出力
+io(out) DDRB: u8 @ $6002;               // VIA1 ポートB の向き
+
+init {
+    ORB  = $00;                         // はじめは 0
+    DDRB = $01;                         // PB0 だけ出力にする
+}
+
+range Bit = 0..8;                       // ビットの番号
+const MASK: [u8; Bit] = [$01, $02, $04, $08, $10, $20, $40, $80];
+
+range Sid = 0..8;                       // 処理する物の番号
+static POS: [u8; Sid] = [0; Sid];       // 物の位置
+static VEL: [i8; Sid] = [1, -1, 2, -2, 1, -1, 2, -2];  // 物の速さ
+
+fn pulse_10us() {                       // PB0 に、幅ちょうど 10 マイクロ秒のパルスを出す
+    io_span(us(10)) {                   // 1 回目の書き込みから 2 回目の書き込みまでを、ちょうどにそろえる
+        ORB = $01;                      // PB0 = 1
+        ORB = $00;                      // PB0 = 0
+    }
+}
+
+fn send_bits(v: u8) {                   // 8 ビットを下の桁から 1 本の線で送る（1 ビットごとに同じ時間）
+    for k in Bit {
+        cycles(24) {                    // 中の命令がちょうど 24 サイクル（分岐の両方をそろえる）
+            if v & MASK[k] != 0 { ORB = $01; } else { ORB = $00; }
+        }
+    }
+    ORB = $00;                          // 最後は 0 に戻す
+}
+
+fn update_all() {                       // 全部の物を動かす
+    for s in Sid { POS[s] = POS[s] + VEL[s]; }  // u8 + i8 → u8
+}
+
+fn main() {
+    print(p"SENDING PULSES ON PB0");
+    newline();
+    let n: u8 = 100;
+    while n > 0 {
+        pulse_10us();
+        delay(us(100));                 // 最低 100 マイクロ秒あける
+        send_bits($A5);                 // 1010_0101 を送る
+        delay(us(1000));                // 最低 1 ミリ秒あける
+        max_cycles(400) {               // この処理は 400 サイクル以内に終わらなければならない（超えたらエラー）
+            update_all();
+        }
+        n -= 1;
+    }
+    print(p"DONE");
+    newline();
+}

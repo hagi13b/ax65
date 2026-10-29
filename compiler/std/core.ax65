@@ -1,0 +1,74 @@
+// <ax65>/std/core.ax65 — core（仕様書 1.1 20.2節）
+// use しなくても core::名前 で使える。名前だけで使うには use core::名前;
+
+pub range Nz8 = 1..256;                 // 0 でない 8 ビットの値
+pub range Nz16 = 1..65536;              // 0 でない 16 ビットの値
+
+pub struct QR8 { q: u8, r: u8 }         // 商と余り
+pub struct QR16 { q: u16, r: u16 }
+
+// マイクロ秒をサイクル数にする（ちょうどにならなければ切り上げ。12.2節）
+pub comptime fn us(t: int) -> int {
+    (t * target.clock + 999_999) / 1_000_000
+}
+
+// 8 ビット × 8 ビット → 16 ビット（シフトと足し算）
+pub fn mul8(a: u8, b: u8) -> u16 {
+    let r: u16 = 0;
+    let x: u16 = a as u16;
+    let y = b;
+    for _i in 0..8 {
+        if y & 1 != 0 { r += x; }
+        x = x << 1;
+        y = y >> 1;
+    }
+    r
+}
+
+// 16 ビット × 16 ビット → 32 ビット
+pub fn mul16(a: u16, b: u16) -> u32 {
+    let r: u32 = 0;
+    let x: u32 = a as u32;
+    let y = b;
+    for _i in 0..16 {
+        if y & 1 != 0 { r += x; }
+        x = x << 1;
+        y = y >> 1;
+    }
+    r
+}
+
+// 商と余り（割る数は 0 でない。5.6節）
+pub fn divmod8(a: u8, b: Nz8) -> QR8 {
+    let n = a;
+    let d: u16 = (b as u8) as u16;
+    let q: u8 = 0;
+    let r: u16 = 0;
+    for _i in 0..8 {
+        r = (r << 1) | ((n >> 7) as u16);
+        n = n << 1;
+        q = q << 1;
+        if r >= d {
+            r = r - d;
+            q = q | 1;
+        }
+    }
+    QR8 { q: q, r: r as u8 }
+}
+
+pub fn divmod16(a: u16, b: Nz16) -> QR16 {
+    let n = a;
+    let d: u32 = (b as u16) as u32;
+    let q: u16 = 0;
+    let r: u32 = 0;
+    for _i in 0..16 {
+        r = (r << 1) | ((n >> 15) as u32);
+        n = n << 1;
+        q = q << 1;
+        if r >= d {
+            r = r - d;
+            q = q | 1;
+        }
+    }
+    QR16 { q: q, r: r as u16 }
+}

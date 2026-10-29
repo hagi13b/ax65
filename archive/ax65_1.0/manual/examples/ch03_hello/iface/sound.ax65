@@ -1,0 +1,6 @@
+// iface/sound.ax65 — 音を出すインターフェース（この本のマシン用。標準ライブラリにはない）
+//   周波数 = クロック ÷ (2 × (period + 2))   （period は 16 ビットの値）
+interface sound {
+    fn tone(period: u16);               // 周期 period の方形波を鳴らし続ける
+    fn off();                           // 音を止める
+}

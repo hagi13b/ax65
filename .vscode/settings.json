@@ -1,0 +1,19 @@
+{
+  "files.exclude": {
+    "**/target": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.git": true
+  },
+  "search.exclude": {
+    "**/target": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/*.bin": true,
+    "**/*.rom": true,
+    "**/*.lst": true,
+    "**/*.sym": true,
+    "**/*.report": true
+  },
+  "editor.formatOnSave": false
+}

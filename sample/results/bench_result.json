@@ -1,0 +1,242 @@
+{
+ "conditions": {
+  "keys": {
+   "5": 4,
+   "12": 4,
+   "30": 6,
+   "60": 5,
+   "90": 4,
+   "140": 4,
+   "200": 6,
+   "260": 6,
+   "261": 4
+  },
+  "quit_frame": 600,
+  "frame_cycles": 30708,
+  "serial_tx_cycles": 960
+ },
+ "versions": {
+  "meteor_O0": {
+   "code_bytes": 493,
+   "const_bytes": 47,
+   "file_bytes": 540,
+   "keys_to_type": 1620,
+   "ideal": {
+    "frames": 600,
+    "startup": 1890,
+    "stack_bytes": 10,
+    "input": [
+     68,
+     68.7,
+     125
+    ],
+    "update": [
+     322,
+     375.3,
+     839
+    ],
+    "draw": [
+     614,
+     614,
+     614
+    ],
+    "frame": [
+     1004,
+     1058.0,
+     1521
+    ],
+    "overrun": 0
+   },
+   "serial": {
+    "frames": 600,
+    "startup": 13104,
+    "frame": [
+     10211,
+     10265.0,
+     10728
+    ],
+    "overrun": 0
+   },
+   "hit_run_frames": 57
+  },
+  "meteor_O1": {
+   "code_bytes": 368,
+   "const_bytes": 47,
+   "file_bytes": 415,
+   "keys_to_type": 1245,
+   "ideal": {
+    "frames": 600,
+    "startup": 1317,
+    "stack_bytes": 6,
+    "input": [
+     23,
+     23.4,
+     47
+    ],
+    "update": [
+     186,
+     231.1,
+     499
+    ],
+    "draw": [
+     553,
+     553,
+     553
+    ],
+    "frame": [
+     762,
+     807.5,
+     1075
+    ],
+    "overrun": 0
+   },
+   "serial": {
+    "frames": 600,
+    "startup": 12549,
+    "frame": [
+     10005,
+     10050.5,
+     10318
+    ],
+    "overrun": 0
+   },
+   "hit_run_frames": 57
+  },
+  "meteor_O2": {
+   "code_bytes": 312,
+   "const_bytes": 47,
+   "file_bytes": 359,
+   "keys_to_type": 1077,
+   "ideal": {
+    "frames": 600,
+    "startup": 1304,
+    "stack_bytes": 9,
+    "input": [
+     31,
+     31.3,
+     53
+    ],
+    "update": [
+     186,
+     232.6,
+     547
+    ],
+    "draw": [
+     498,
+     498,
+     498
+    ],
+    "frame": [
+     715,
+     761.9,
+     1076
+    ],
+    "overrun": 0
+   },
+   "serial": {
+    "frames": 600,
+    "startup": 12536,
+    "frame": [
+     10012,
+     10058.9,
+     10373
+    ],
+    "overrun": 0
+   },
+   "hit_run_frames": 57
+  },
+  "meteor_Os": {
+   "code_bytes": 352,
+   "const_bytes": 47,
+   "file_bytes": 399,
+   "keys_to_type": 1197,
+   "ideal": {
+    "frames": 600,
+    "startup": 1196,
+    "stack_bytes": 6,
+    "input": [
+     19,
+     19.3,
+     41
+    ],
+    "update": [
+     186,
+     231.1,
+     499
+    ],
+    "draw": [
+     487,
+     487,
+     487
+    ],
+    "frame": [
+     692,
+     737.5,
+     1005
+    ],
+    "overrun": 0
+   },
+   "serial": {
+    "frames": 600,
+    "startup": 12428,
+    "frame": [
+     9998,
+     10043.5,
+     10311
+    ],
+    "overrun": 0
+   },
+   "hit_run_frames": 57
+  },
+  "meteor_hand": {
+   "code_bytes": 282,
+   "const_bytes": 47,
+   "file_bytes": 329,
+   "keys_to_type": 987,
+   "ideal": {
+    "frames": 600,
+    "startup": 1085,
+    "stack_bytes": 10,
+    "input": [
+     19,
+     19.3,
+     41
+    ],
+    "update": [
+     185,
+     231.0,
+     526
+    ],
+    "draw": [
+     484,
+     484,
+     484
+    ],
+    "frame": [
+     688,
+     734.3,
+     1029
+    ],
+    "overrun": 0
+   },
+   "serial": {
+    "frames": 600,
+    "startup": 12250,
+    "frame": [
+     9970,
+     10016.3,
+     10311
+    ],
+    "overrun": 0
+   },
+   "hit_run_frames": 57
+  }
+ },
+ "same_output": {
+  "ideal": true,
+  "serial": true,
+  "hit": true
+ },
+ "output_bytes": 6625,
+ "final_line": "GAME OVER  SCORE 0072"
+}

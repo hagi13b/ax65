@@ -1,0 +1,37 @@
+// src/leds_demo.ax65 — メモリマップト I/O：VIA1 のポートB の LED を光らせる
+use hw::leds;                           // LED のモジュール（init でポートB を出力にする）
+use hw::leds::Led;                      // LED の名前の型を、名前だけで使う
+use core::us;                           // マイクロ秒をサイクル数にする
+
+fn wait_ms(n: u8) {                     // おおよそ n ミリ秒待つ
+    while n > 0 {
+        delay(us(1000));                // 最低 1000 マイクロ秒待つ（サイクル数はクロックから計算される）
+        n -= 1;
+    }
+}
+
+fn main() {
+    let v: u8 = 0;
+    while v < 16 {                      // 0〜15 を 2 進数で表示する
+        leds::show(v);
+        wait_ms(250);
+        v += 1;
+    }
+
+    let pos: u8 = $01;                  // 光る位置（ビット）
+    let n: u8 = 14;
+    while n > 0 {                       // 光を左右に往復させる（7 回で端まで行って戻る）
+        leds::show(pos);
+        wait_ms(80);
+        if n > 7 { pos = pos << 1; } else { pos = pos >> 1; }
+        n -= 1;
+    }
+
+    leds::show(0);
+    leds::on(Led::L0);                  // 1 個だけつける（tsb）
+    leds::on(Led::L7);                  // もう 1 個つける
+    wait_ms(250);
+    leds::off(Led::L0);                 // 1 個だけ消す（trb）
+    wait_ms(250);
+    leds::show(0);                      // 全部消して終わる
+}

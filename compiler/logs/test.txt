@@ -1,0 +1,31 @@
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running unittests src/main.rs (target/release/deps/ax65-6ed4990459079fec)
+
+running 23 tests
+test asm6502::tests::basic_encoding ... ok
+test asmtext::tests::exprs ... ok
+test asm6502::tests::labels_and_branches ... ok
+test asm6502::tests::lo_hi_parts ... ok
+test asmtext::tests::operands ... ok
+test lexer::tests::ranges_and_reals ... ok
+test lexer::tests::comments_and_puncts ... ok
+test lexer::tests::numbers ... ok
+test asmtext::tests::lines ... ok
+test asm6502::tests::long_branch_relaxation ... ok
+test parser::tests::asm_fn_and_block ... ok
+test parser::tests::chained_compare_error ... ok
+test lexer::tests::chars_labels_strings ... ok
+test parser::tests::comptime_items ... ok
+test parser::tests::legacy_array_type ... ok
+test parser::tests::mut_error ... ok
+test parser::tests::control_flow ... ok
+test parser::tests::items_basic ... ok
+test parser::tests::precedence ... ok
+test peep::tests::io_reads_kept ... ok
+test peep::tests::bool_through_carry ... ok
+test peep::tests::keep_region_untouched ... ok
+test peep::tests::reload_and_temp ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+exit=0

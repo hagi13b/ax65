@@ -1,0 +1,24 @@
+// targets/v2.target — シリアル端末だけの構成（仕様書 1.0 16章）
+target v2 {
+    cpu          = Cpu::W65C02S;        // CPU の品種
+    clock        = 1_000_000;           // 1MHz
+    stack        = 128;                 // ハードウェアスタックの予算（バイト）
+    run          = ram;                 // RAM に読み込んで実行する
+    load         = $0300;               // 読み込み先（Wozmon から 300R で実行する）
+    exit         = monitor($FF1F);      // main が終わったらモニタへ戻る
+    irq          = indirect($0280);     // モニタの ROM が jmp ($0280) で IRQ 処理へ飛ぶ
+    nmi          = indirect($0282);     // 同じく NMI
+    irq_interval = 16_666;              // IRQ の最短の間隔（サイクル）。割り込み処理の時間の検査に使う
+
+    region zp    = $00..=$EF;           // ゼロページのうち使ってよい範囲
+    region stack = $0100..=$01FF;
+    region ram   = $0200..=$1FFF;       // RAM 8KB
+    region io    = $6000..=$8FFF;       // VIA（$6000）と ACIA（$8000）
+    reserve $24..=$2B;                  // Wozmon が使うゼロページ
+    reserve $0200..=$0283;              // Wozmon の入力バッファと、IRQ・NMI のベクタ
+
+    output = [woz, bin, sym, lst];      // 既定で出力する形式
+
+    bind console = hw::acia_console;    // 1文字の入出力は ACIA
+    // screen は bind しない → target.has(screen) は false
+}

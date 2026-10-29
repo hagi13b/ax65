@@ -1,0 +1,21 @@
+// hw/hexmon.ax65 — モニタ HEXMON の API を extern fn で宣言したもの（$FF00〜$FF11 のジャンプテーブル。番地は固定）
+//   どれも jsr で呼び、rts で戻ってくる。壊すのは clobbers に書いたものだけで、ほかのレジスタは保たれる。
+//   スタックの使用量はガイドに書かれていないので、戻り番地の 2 バイトに余裕を足した値にしている。
+
+pub extern fn display()                         // DISPLAY：表示バッファ SEGDATA（$02〜$07）の 6 桁を表示する
+    @ $FF00 clobbers(A, X, flags) stack(4);
+
+pub extern fn poll_key() -> Option<u8> in A     // POLL_KEY：新しく押されたキーがあれば Some(キーコード)。待たない
+    @ $FF03 clobbers(A, flags) stack(4);
+
+pub extern fn wait_key() -> u8 in A             // WAIT_KEY：キーが押されるまで待ち、キーコードを返す
+    @ $FF06 clobbers(A, flags) stack(6);
+
+pub extern fn delay_ms(ms: u8 in A)             // DELAY_MS：ms ミリ秒待つ（0 は 256 ミリ秒）
+    @ $FF09 clobbers(A, flags) stack(4);
+
+pub extern fn put_hex(v: u8 in A, pos: u8 in X) // PUT_HEX：v を 16 進 2 桁にして SEGDATA+pos に入れる（表示はまだ変わらない）
+    @ $FF0C clobbers(A, flags) stack(4);
+
+pub extern fn delay_10ms(n: u8 in A)            // DELAY_10MS：n × 10 ミリ秒待つ（0 は 2.56 秒）
+    @ $FF0F clobbers(A, X, flags) stack(6);

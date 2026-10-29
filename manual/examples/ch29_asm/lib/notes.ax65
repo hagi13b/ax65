@@ -1,0 +1,52 @@
+// lib/notes.ax65 — 音の高さの計算（コンパイル時）と、音階の周期の表
+//   標準のインターフェース sound の tone() に渡す値 period を、周波数から求める。
+//   周波数 = クロック ÷ (2 × (period + 2)) なので、period = クロック ÷ (2 × 周波数) − 2
+
+pub range Note = 0..37;                 // 音の番号：0 = C3（低いド）、12 = C4、24 = C5、36 = C6
+
+comptime assert(target.clock <= 16_000_000, "クロックが速すぎて、低い音の周期が 16 ビットに収まらない");
+
+pub comptime fn period_of(hz: real) -> u16 {   // 周波数（Hz）から period を求める（コンパイル時だけ）
+    round(target.clock as real / (2.0 * hz) - 2.0) as u16   // u16 に収まらなければコンパイルエラー
+}
+
+comptime fn base_hz(n: int) -> real {   // C4〜B4 の 12 音の周波数（Hz、平均律、A4 = 440Hz）
+    match n {
+        0 => 261.626,  1 => 277.183,  2 => 293.665,  3 => 311.127,
+        4 => 329.628,  5 => 349.228,  6 => 369.994,  7 => 391.995,
+        8 => 415.305,  9 => 440.0,   10 => 466.164, 11 => 493.883,
+        _ => 440.0,                     // ここには来ない（int は値が多いので _ が必須）
+    }
+}
+
+comptime fn octave_scale(o: int) -> real {     // オクターブごとの倍率（1 オクターブ上がると 2 倍）
+    match o {
+        0 => 0.5,                       // C3〜B3
+        1 => 1.0,                       // C4〜B4
+        2 => 2.0,                       // C5〜B5
+        _ => 4.0,                       // C6
+    }
+}
+
+pub comptime fn note_hz(i: int) -> real {      // 音の番号から周波数を求める
+    base_hz(i % 12) * octave_scale(i / 12)     // int の計算なので % や / を自由に使える
+}
+
+pub const NOTE_PERIOD: [u16; Note] = [for i in 0..37 => period_of(note_hz(i))];   // 37 音の表
+
+pub const C3: Note = 0;                 // 音の名前（ド・レ・ミ…）。定数なので Note として使える
+pub const C4: Note = 12;
+pub const D4: Note = 14;
+pub const E4: Note = 16;
+pub const F4: Note = 17;
+pub const G4: Note = 19;
+pub const A4: Note = 21;
+pub const B4: Note = 23;
+pub const C5: Note = 24;
+pub const D5: Note = 26;
+pub const E5: Note = 28;
+pub const F5: Note = 29;
+pub const G5: Note = 31;
+pub const A5: Note = 33;
+pub const B5: Note = 35;
+pub const C6: Note = 36;

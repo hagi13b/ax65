@@ -1,0 +1,68 @@
+// src/timer_clock.ax65 — タイマーと割り込み：1/60 秒の IRQ で時計を動かし、7 セグメント LED に時・分・秒を出す
+//   ターゲット：v2x（仮の構成。IRQ 対応に改造した HEXMON が必要）。A/D のキーで終わる
+use hw::via_timer;                      // 増設 VIA のタイマー1（init で 1/60 秒ごとに IRQ を起こし始める）
+use hw::hexpad;                         // 7 セグメント LED とキー
+use lib::out::{print, newline, print_u16};  // 端末への出力
+
+comptime assert(target.has_irq, "このプログラムは割り込みのあるターゲット（v2x）用です");
+
+shared(irq) FRAMES: u8 = 0;             // 1/60 秒ごとに 1 増える（書くのは IRQ 処理だけ。1 バイト）
+shared(irq) TICKS: u16 = 0;             // 起動からの 1/60 秒の数（2 バイト）
+
+static SEC: bcd8 = 0;                   // 時刻（10 進 2 桁ずつ）
+static MIN: bcd8 = 0;
+static HOUR: bcd8 = 0;
+
+#[interrupt(irq)]
+fn on_irq() {                           // IRQ 処理（レジスタの退避と rti はコンパイラが作る）
+    if via_timer::ack() {               // タイマー1 による割り込みなら、原因を消して true
+        FRAMES += 1;                    // 割り込み処理の中なので、どの操作も atomic なしで書ける
+        TICKS += 1;
+    }
+}
+
+fn tick_second() {                      // 時刻を 1 秒進める
+    SEC += 1;
+    if SEC >= 60 { SEC = 0; MIN += 1; }
+    if MIN >= 60 { MIN = 0; HOUR += 1; }
+    if HOUR >= 24 { HOUR = 0; }
+}
+
+fn show_time() {                        // 左から 時・分・秒（2 桁ずつ）
+    hexpad::show_bcd8(2, HOUR);
+    hexpad::show_bcd8(1, MIN);
+    hexpad::show_bcd8(0, SEC);
+}
+
+fn main() {
+    print(p"CLOCK ON THE 7-SEGMENT LED. A/D TO QUIT");
+    newline();
+    show_time();
+    irq_enable();                       // ここで初めて IRQ を受け付ける
+
+    let last = FRAMES;                  // 1 バイトの shared の読み込みは atomic が要らない
+    let acc: u8 = 0;                    // たまった 1/60 秒の数
+    loop {
+        let now = FRAMES;
+        acc += now - last;              // 前回から増えた分（一周しても差は正しい）
+        last = now;
+        if acc >= 60 {                  // 1 秒たった
+            acc -= 60;
+            tick_second();
+            show_time();
+        }
+        if let Some(k) = hexpad::key() {    // HEXPAD のキーを、待たずに調べる
+            if k == hexpad::KEY_AD { break; }
+        }
+        comptime if target.cpu == Cpu::W65C02S && target.has_irq {
+            wait_interrupt();           // 次の割り込みまで CPU を休ませる（wai）
+        }
+    }
+
+    let t = atomic { TICKS };           // 2 バイトの shared をメインで読むので atomic が必要
+    print(p"TOTAL TICKS ");
+    print_u16(t);
+    newline();
+    via_timer::stop();                  // タイマーの割り込みを止めてから
+    irq_disable();                      // CPU も割り込みを受け付けないようにして、モニタへ戻る
+}

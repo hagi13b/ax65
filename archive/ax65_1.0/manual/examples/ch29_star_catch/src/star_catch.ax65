@@ -1,0 +1,312 @@
+// src/star_catch.ax65 — 総仕上げ：STAR CATCH（落ちてくる星をかごで受けるゲーム）
+//   ターゲット：v3（画面が必要）。キーボードで操作し、効果音は IRQ 処理が鳴らす。
+//   操作：A / J で左、D / L で右、スペースで開始、Q で終了
+use keyboard;                           // ASCII キーボード（メインだけで使う）
+use screen;                             // 文字画面（メインだけで使う）
+use sound;                              // 音（IRQ 処理だけで使う）
+use hw::via1_timer;                     // 1/60 秒の IRQ
+use lib::notes;                         // 周波数 → period（コンパイル時）
+use core::divmod8;                      // 割り算の余り
+
+comptime assert(target.has(screen), "このゲームは画面のあるターゲット（v3）用です");
+
+// ---- 画面の配置 ---------------------------------------------------------
+
+const WIDTH: u8 = 40;                   // 画面の幅
+const TOP: u8 = 2;                      // 星が現れる行
+const PLAYER_ROW: u8 = 21;              // かごの行
+const FLOOR_ROW: u8 = 22;               // 床の行（ここまで落ちたら取りそこね）
+const BASKET_W: u8 = 3;                 // かごの幅
+const MAX_X: u8 = WIDTH - BASKET_W;     // かごの左端の最大値（37）
+
+// ---- 型 -----------------------------------------------------------------
+
+range Sid = 0..4;                       // 星の番号（同時に 4 個まで）
+struct Star { x: u8, y: u8, wait: u8, active: bool }
+enum Key { Left, Right, Quit }          // 操作
+enum Sfx { Silent, Start, Coin, Crash, Stop }   // 効果音の注文
+
+// ---- 変数 ---------------------------------------------------------------
+
+static STARS: [Star; Sid] = [Star { x: 0, y: 0, wait: 0, active: false }; Sid];
+static PLAYER_X: u8 = 18;               // かごの左端の列
+static SCORE: bcd16 = 0;                // 得点（10 進 4 桁）
+static HI: bcd16 = 0;                   // 最高得点
+static LIVES: u8 = 3;                   // 残りの数
+static SPEED: u8 = 12;                  // 星が 1 行落ちるまでのフレーム数（小さいほど速い）
+static CAUGHT: u8 = 0;                  // 受け取った数（速さを上げるのに使う）
+static SPAWN_WAIT: u8 = 30;             // 次の星を出すまでのフレーム数
+static SEED: u8 = $5A;                  // 乱数の種
+
+shared(irq) FRAMES: u8 = 0;             // 1/60 秒ごとに増える（書くのは IRQ 処理だけ）
+shared SFX_REQ: Sfx = Sfx::Silent;      // 効果音の注文（メインが書き、IRQ 処理が受け取って消す）
+
+// ---- 効果音の表（コンパイル時に計算） ----------------------------------
+
+range Fx = 0..8;                        // 効果音の 8 ステップ（1 ステップ = 1/60 秒）
+
+comptime fn start_hz(i: int) -> real {  // ド・ミ・ソ・ド（2 ステップずつ）
+    match i / 2 {
+        0 => notes::note_hz(24),        // C5
+        1 => notes::note_hz(28),        // E5
+        2 => notes::note_hz(31),        // G5
+        _ => notes::note_hz(36),        // C6
+    }
+}
+comptime fn coin_hz(i: int) -> real { if i < 3 { 987.767 } else { 1318.51 } }   // B5 → E6
+comptime fn crash_hz(i: int) -> real { 320.0 - i as real * 30.0 }               // 下がっていく音
+
+const START_TONES: [u16; Fx] = [for i in 0..8 => notes::period_of(start_hz(i))];
+const COIN_TONES:  [u16; Fx] = [for i in 0..8 => notes::period_of(coin_hz(i))];
+const CRASH_TONES: [u16; Fx] = [for i in 0..8 => notes::period_of(crash_hz(i))];
+
+// ---- 割り込み（IRQ の文脈） ---------------------------------------------
+
+#[interrupt(irq)]
+fn on_irq() {
+    if via1_timer::ack() {              // タイマー1 による割り込み
+        FRAMES += 1;
+        sfx_step();
+    }
+}
+
+fn sfx_step() {                         // 効果音を 1 ステップ進める（IRQ 処理からだけ呼ぶ）
+    static KIND: Sfx = Sfx::Silent;     // 鳴らしている効果音
+    static POS: u8 = 0;                 // 何ステップ目か
+
+    let req = SFX_REQ;
+    if req != Sfx::Silent {             // 新しい注文
+        KIND = req;
+        POS = 0;
+        SFX_REQ = Sfx::Silent;
+    }
+    match KIND {
+        Sfx::Silent => { return; }
+        Sfx::Stop   => { sound::off(); KIND = Sfx::Silent; return; }
+        _           => {}
+    }
+    if let Some(i) = Fx::check(POS) {
+        match KIND {
+            Sfx::Start => sound::tone(START_TONES[i]),
+            Sfx::Coin  => sound::tone(COIN_TONES[i]),
+            Sfx::Crash => sound::tone(CRASH_TONES[i]),
+            _          => {}
+        }
+        POS += 1;
+    } else {
+        sound::off();
+        KIND = Sfx::Silent;
+    }
+}
+
+// ---- 乱数 ---------------------------------------------------------------
+
+asm fn rand_step(r: u8) -> u8 {         // 8 ビットの疑似乱数（ガロア型 LFSR）
+    asl a                   ; A を左に 1 ビットずらす（はみ出たビットはキャリーへ）
+    bcc done                ; はみ出たビットが 0 なら done へ飛ぶ
+    eor #$1D                ; 1 なら決まった値と XOR を取る
+done:                       ; 合流地点
+    rts                     ; A を戻り値として返す
+}
+
+fn rand() -> u8 {
+    SEED = rand_step(SEED);
+    SEED
+}
+
+// ---- 時間 ---------------------------------------------------------------
+
+fn wait_frame() {                       // 次のフレーム（FRAMES が変わる）まで待つ
+    let f = FRAMES;                     // 1 バイトの shared は、そのまま読める
+    while FRAMES == f {
+        comptime if target.cpu == Cpu::W65C02S {
+            wait_interrupt();           // 割り込みが来るまで CPU を止める
+        }
+    }
+}
+
+fn wait_frames(n: u8) {                 // n フレーム待つ
+    while n > 0 { wait_frame(); n -= 1; }
+}
+
+// ---- 表示 ---------------------------------------------------------------
+
+fn put_str(x: u8, y: u8, s: str@screen) {   // 画面用の文字列を横に書く
+    for c in s { screen::put(x, y, c); x += 1; }
+}
+
+fn put_digit(x: u8, y: u8, d: u8) {     // 0〜9 の数字を 1 文字書く
+    screen::put(x, y, ('0'@screen as u8 + d) as char@screen);
+}
+
+fn put_bcd16(x: u8, y: u8, v: bcd16) {  // 4 桁を書く
+    for d in v.digits() { put_digit(x, y, d); x += 1; }
+}
+
+fn draw_status() {                      // 一番上の行：得点、最高得点、残り
+    put_str(0, 0, p"SCORE"@screen);
+    put_bcd16(6, 0, SCORE);
+    put_str(13, 0, p"HI"@screen);
+    put_bcd16(16, 0, HI);
+    put_str(30, 0, p"LIVES"@screen);
+    put_digit(36, 0, LIVES);
+}
+
+fn draw_field() {                       // 枠の線と床
+    for x in 0..WIDTH {
+        screen::put(x, 1, '-'@screen);
+        screen::put(x, FLOOR_ROW, '='@screen);
+    }
+}
+
+fn draw_basket(show: bool) {            // かごを描く（show が false なら消す）
+    if show {
+        put_str(PLAYER_X, PLAYER_ROW, p"[_]"@screen);
+    } else {
+        put_str(PLAYER_X, PLAYER_ROW, p"   "@screen);
+    }
+}
+
+// ---- 入力 ---------------------------------------------------------------
+
+fn read_key() -> Option<Key> {
+    let c = keyboard::poll()?;          // 押されていなければ None
+    match c {
+        'A' | 'a' | 'J' | 'j' => Some(Key::Left),
+        'D' | 'd' | 'L' | 'l' => Some(Key::Right),
+        'Q' | 'q'             => Some(Key::Quit),
+        _                     => None,
+    }
+}
+
+fn move_basket(k: Key) {
+    match k {
+        Key::Left  => {
+            if PLAYER_X > 0 { draw_basket(false); PLAYER_X -= 1; }
+        }
+        Key::Right => {
+            if PLAYER_X < MAX_X { draw_basket(false); PLAYER_X += 1; }
+        }
+        Key::Quit  => {}
+    }
+}
+
+// ---- 星 -----------------------------------------------------------------
+
+fn spawn() {                            // 空いている星を 1 つ出す
+    for s in Sid {
+        if !STARS[s].active {
+            STARS[s].active = true;
+            STARS[s].x = divmod8(rand(), WIDTH).r;  // 0〜39（WIDTH は定数なので Nz8 として渡せる）
+            STARS[s].y = TOP;
+            STARS[s].wait = SPEED;
+            screen::put(STARS[s].x, TOP, '*'@screen);
+            return;
+        }
+    }
+}
+
+fn caught(x: u8) -> bool {              // かごの中に入ったか
+    x >= PLAYER_X && x < PLAYER_X + BASKET_W
+}
+
+fn update_stars() {                     // 星を落とし、受け取りと取りそこねを調べる
+    for s in Sid {
+        if !STARS[s].active { continue; }
+        if STARS[s].wait > 0 {
+            STARS[s].wait -= 1;
+            continue;
+        }
+        STARS[s].wait = SPEED;
+        screen::put(STARS[s].x, STARS[s].y, ' '@screen);   // 今の位置を消す
+        STARS[s].y += 1;
+        if STARS[s].y == PLAYER_ROW && caught(STARS[s].x) {
+            STARS[s].active = false;    // 受け取った
+            SCORE += 1;
+            CAUGHT += 1;
+            if CAUGHT & 7 == 0 && SPEED > 3 { SPEED -= 1; }   // 8 個ごとに速くする
+            SFX_REQ = Sfx::Coin;        // 効果音の注文（1 命令の操作）
+        } else if STARS[s].y == FLOOR_ROW {
+            STARS[s].active = false;    // 取りそこねた
+            LIVES -= 1;
+            SFX_REQ = Sfx::Crash;
+            screen::put(STARS[s].x, FLOOR_ROW, '='@screen);    // 床を描き直す
+        } else {
+            screen::put(STARS[s].x, STARS[s].y, '*'@screen);   // 新しい位置に描く
+        }
+    }
+}
+
+// ---- ゲームの流れ -------------------------------------------------------
+
+fn reset_game() {
+    for s in Sid { STARS[s].active = false; }
+    PLAYER_X = 18;
+    SCORE = 0;
+    LIVES = 3;
+    SPEED = 12;
+    CAUGHT = 0;
+    SPAWN_WAIT = 30;
+}
+
+fn title() -> bool {                    // タイトル画面。スペースで true、Q で false
+    screen::clear();
+    put_str(15, 8, p"STAR CATCH"@screen);
+    put_str(8, 12, p"A/J: LEFT    D/L: RIGHT"@screen);
+    put_str(12, 14, p"SPACE: START"@screen);
+    put_str(14, 16, p"Q: QUIT"@screen);
+    put_str(13, 20, p"HI SCORE"@screen);
+    put_bcd16(22, 20, HI);
+    loop {
+        wait_frame();
+        rand();                         // 待っている間も乱数を進める（毎回ちがう並びになる）
+        if let Some(c) = keyboard::poll() {
+            if c == ' ' { return true; }
+            if c == 'Q' || c == 'q' { return false; }
+        }
+    }
+}
+
+fn play() {                             // 1 回分のゲーム
+    reset_game();
+    screen::clear();
+    draw_field();
+    draw_status();
+    SFX_REQ = Sfx::Start;
+    loop {
+        wait_frame();
+        if let Some(k) = read_key() {
+            if k == Key::Quit { return; }
+            move_basket(k);
+        }
+        if SPAWN_WAIT > 0 {
+            SPAWN_WAIT -= 1;
+        } else {
+            spawn();
+            SPAWN_WAIT = 20 + (rand() & 31);    // 20〜51 フレーム後に次の星
+        }
+        update_stars();
+        draw_basket(true);              // 星を消したときに欠けても、毎回描き直す
+        draw_status();
+        if LIVES == 0 { return; }
+    }
+}
+
+fn game_over() {
+    put_str(15, 11, p"GAME OVER"@screen);
+    if SCORE > HI { HI = SCORE; }       // BCD どうしの大小比較
+    wait_frames(120);                   // 2 秒
+}
+
+fn main() {
+    irq_enable();                       // タイマーの IRQ を受け付ける
+    while title() {
+        play();
+        game_over();
+    }
+    SFX_REQ = Sfx::Stop;                // 音を止めるのも IRQ 処理に頼む
+    wait_frames(2);
+    via1_timer::stop();                 // タイマーの割り込みを止める
+    irq_disable();
+    screen::clear();
+}                                       // モニタへ戻る

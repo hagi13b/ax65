@@ -1,0 +1,7 @@
+ax65：v2（-Os） をコンパイルしました：コード 426 バイト、定数 47 バイト、変数 0 バイト、スタック 4 バイト（警告 0 件）
+  → build/Os/meteor.bin
+  → build/Os/meteor.woz
+  → build/Os/meteor.sym
+  → build/Os/meteor.lst
+  → build/Os/meteor.report
+exit=0

@@ -1,0 +1,220 @@
+// src/meteor.ax65 — ax65 サンプル：隕石よけゲーム（ax65 仕様書 1.0）
+//
+// 想定するターゲット：
+//   v2 … シリアル端末だけの構成（スコアを端末に表示する）
+//   v3 … 画面のある構成（隕石とプレイヤーを画面に描く）
+// どちらのターゲットも、$6000 に VIA（6522）があり、
+// main が終わったらモニタへ戻る（exit = monitor(...)）。ターゲット定義は targets/ を参照。
+// console の実装は hw/acia_console.ax65、screen の実装は hw/v3_screen.ax65（v3 だけ）。
+//
+// 操作：A で左、D で右、Q で終了
+
+use console::{putc, poll};              // 1文字の入出力（実装はターゲットの bind で決まる）
+use screen;                             // 画面（bind されていないターゲットもある）
+
+// ---- 定数 ---------------------------------------------------------------
+
+const FIELD_W: u8 = 20;                 // 画面の幅（マス）
+const FIELD_H: u8 = 16;                 // 画面の高さ（マス）
+const PLAYER_Y: u8 = FIELD_H - 1;       // プレイヤーは一番下の行にいる
+
+// タイマーの周期：1/60 秒ごとに割り込みを起こす（クロックはターゲット定義から読む）
+comptime assert(target.clock / 60 <= 65535, "クロックが速すぎて、タイマーの周期が16ビットに収まらない");
+const T1_PERIOD: u16 = (target.clock / 60 - 2) as u16;
+
+const TITLE: str = p"METEOR DODGE";     // 長さ付きの文字列（ASCII）
+
+// ---- 型 -----------------------------------------------------------------
+
+range Mid = 0..8;                       // 隕石の番号（0〜7）。終わりの 8 は含まない
+
+enum Key { Left, Right, Quit }          // 操作の種類
+
+flags Ifr { Ca2, Ca1, Shift, Cb2, Cb1, T2, T1, Any }   // VIA の割り込みフラグ（ビット0〜7）
+
+struct Meteor { x: u8, y: u8, wait: u8 }   // wait：次に1マス落ちるまでのフレーム数
+
+// ---- 表（コンパイル時に計算する） --------------------------------------
+
+comptime fn spawn_x(i: int) -> u8 {     // 隕石が出てくる列（コンパイル時専用の関数）
+    ((i * 7 + 3) % 20) as u8            // int の計算なので、% も自由に使える
+}
+
+const SPAWN_X: [u8; Mid] = [for i in 0..8 => spawn_x(i)];   // 8個の出現位置の表
+
+// ---- 変数 ---------------------------------------------------------------
+
+static METEORS: [Meteor; Mid] = [Meteor { x: 0, y: 0, wait: 0 }; Mid];  // フィールドごとの配列になる
+static PLAYER_X: u8 = FIELD_W / 2;  // プレイヤーの列
+static SCORE: bcd16 = 0;            // スコア（10進4桁）
+static SEED: u8 = $5A;              // 乱数の種（0 以外）
+
+shared(irq) TICKS: u16 = 0;             // 1/60 秒ごとに増える。書き込むのは割り込み処理だけ
+
+// ---- I/O（VIA） ---------------------------------------------------------
+// 本来は VIA のドライバのモジュールにまとめるが、サンプルなのでここに置く。
+// I/O 変数は pub にできないので、このモジュールの外からは触れない。
+
+io        T1C_L: u8  @ $6004;           // タイマー1 下位（書くと周期の設定、読むと割り込みフラグが消える）
+io(out)   T1C_H: u8  @ $6005;           // タイマー1 上位（書いた瞬間にタイマーが動き出す）
+io(out)   ACR:   u8  @ $600B;           // 補助制御レジスタ
+io(in)    IFR:   Ifr @ $600D;           // 割り込みフラグ（ビットフラグ型として読む）
+io(out)   IER:   u8  @ $600E;           // 割り込みの許可
+
+init {                                  // 起動時に main の前に1回だけ実行される（割り込みは止まったまま）
+    ACR   = 0b0100_0000;                // タイマー1 を連続モードにする
+    T1C_L = (T1_PERIOD & $FF) as u8;    // 下位を先に書く（I/O の読み書きの順序はソースどおりに守られる）
+    T1C_H = (T1_PERIOD >> 8) as u8;     // 上位を書くと動き出す
+    IER   = 0b1100_0000;                // タイマー1 の割り込みを許可する
+}
+
+// ---- 割り込み -----------------------------------------------------------
+
+#[interrupt(irq)]
+fn on_irq() {
+    if IFR.contains(Ifr::T1) {          // タイマー1 による割り込みか
+        let _ = T1C_L;                  // 読むだけで割り込みフラグが消える（この読み込みは省略されない）
+        TICKS += 1;                     // 割り込み処理の中なので atomic は不要（10.4節）
+    }
+}
+
+fn ticks() -> u16 {
+    atomic { TICKS }                    // 16ビットの読み込みは2命令なので、割り込みを止めて読む
+}
+
+fn wait_frame(last: u16) -> u16 {       // 次のフレーム（TICKS が変わる）まで待つ
+    loop {
+        let now = ticks();
+        if now != last { return now; }
+        comptime if target.cpu == Cpu::W65C02S {
+            wait_interrupt();           // W65C02S なら、割り込みが来るまで CPU を止めて待つ
+        }
+    }
+}
+
+// ---- 乱数 ---------------------------------------------------------------
+
+asm fn rand_step(r: u8) -> u8 {         // 8ビットの疑似乱数（ガロア型 LFSR）。r は A で届き、A で返す
+    asl a                   ; A を左に1ビットずらす（はみ出たビットはキャリーへ）
+    bcc done                ; はみ出たビットが 0 なら、そのまま done へ飛ぶ
+    eor #$1D                ; 1 なら、決まった値と XOR を取る（周期が最大の255になる定数）
+done:                       ; 合流地点
+    rts                     ; A を戻り値として返す
+}
+
+fn rand() -> u8 {
+    SEED = rand_step(SEED);
+    SEED                                // 最後の式が戻り値になる（return を省略）
+}
+
+// ---- 入力 ---------------------------------------------------------------
+
+fn read_key() -> Option<Key> {
+    let c = poll()?;                    // キーが押されていなければ、この関数も None を返して抜ける
+    match c {
+        'A' | 'a' => Some(Key::Left),
+        'D' | 'd' => Some(Key::Right),
+        'Q' | 'q' => Some(Key::Quit),
+        _         => None,              // char は値が多いので、_ が必須
+    }
+}
+
+fn move_player(k: Key) {
+    match k {                           // Key の値をすべて書かないとエラーになる
+        Key::Left  => { PLAYER_X = PLAYER_X.saturating_sub(1); }   // 0 より左には行かない
+        Key::Right => { if PLAYER_X < FIELD_W - 1 { PLAYER_X += 1; } }
+        Key::Quit  => {}
+    }
+}
+
+// ---- 隕石 ---------------------------------------------------------------
+
+fn clear_meteors() {
+    #[reg(x)]                           // ループの番号を X に置く（中で関数を呼ばないので置ける）
+    for m in Mid {                      // m は Mid 型なので、METEORS[m] に範囲の検査は要らない
+        METEORS[m].y = 0;
+        METEORS[m].wait = m as u8;      // 出てくる時間をずらす
+    }
+}
+
+fn respawn(m: Mid) {                    // 隕石を一番上の行に出し直す
+    let r = rand();
+    METEORS[m].x = SPAWN_X[Mid::wrap(r)];   // 下位3ビットだけを取って、必ず 0〜7 にする（and 1命令）
+    METEORS[m].y = 0;
+    METEORS[m].wait = r & 3;
+}
+
+fn update_meteors() -> bool {           // 隕石を動かし、プレイヤーに当たったら true を返す
+    let hit = false;
+    for m in Mid {
+        if METEORS[m].wait > 0 {
+            METEORS[m].wait -= 1;
+            continue;
+        }
+        METEORS[m].wait = 3;
+        METEORS[m].y += 1;
+        if METEORS[m].y == FIELD_H {    // 下まで落ちきったら、上から出直す
+            respawn(m);
+            SCORE += 1;                 // BCD の足し算（sed と cld はコンパイラが入れる）
+        } else if METEORS[m].y == PLAYER_Y && METEORS[m].x == PLAYER_X {
+            hit = true;
+        }
+    }
+    hit
+}
+
+// ---- 表示 ---------------------------------------------------------------
+
+fn print(s: str) {                      // 長さ付きの文字列を出力する
+    for c in s { putc(c); }
+}
+
+fn print_score() {
+    for d in SCORE.digits() {           // 上の桁から1桁ずつ（0〜9）取り出す
+        putc(('0' as u8 + d) as char);
+    }
+}
+
+fn draw() {
+    comptime if target.has(screen) {    // 画面が bind されているターゲットだけ
+        screen::clear();
+        for x in (0..FIELD_W).rev() {   // 逆順のループ（dex と bpl で回るので少し速い）
+            screen::put(x, FIELD_H, '-'@screen);    // 床を描く（画面用の文字コードに変換済み）
+        }
+        for m in Mid {
+            screen::put(METEORS[m].x, METEORS[m].y, '*'@screen);
+        }
+        screen::put(PLAYER_X, PLAYER_Y, 'A'@screen);
+    } else {                            // 画面がないターゲット：スコアだけを端末に上書き表示する
+        putc('\r');
+        print(p"SCORE ");
+        print_score();
+    }
+}
+
+// ---- メイン -------------------------------------------------------------
+
+fn main() {
+    print(TITLE);
+    putc('\r');
+
+    clear_meteors();
+    for m in Mid { respawn(m); }
+
+    irq_enable();                       // ここで初めて割り込みを許可する
+
+    let last = ticks();
+    'game: loop {
+        last = wait_frame(last);
+        if let Some(k) = read_key() {
+            if k == Key::Quit { break 'game; }
+            move_player(k);
+        }
+        if update_meteors() { break 'game; }
+        draw();
+    }
+
+    print(p"\rGAME OVER  SCORE ");
+    print_score();
+    putc('\r');
+}                                       // main が終わるとモニタへ戻る（ターゲット定義の exit）

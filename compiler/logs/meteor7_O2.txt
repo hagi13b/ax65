@@ -1,0 +1,7 @@
+ax65：v2（-O2） をコンパイルしました：コード 396 バイト、定数 0 バイト、変数 0 バイト、スタック 2 バイト（警告 0 件）
+  → build/meteor7_O2/meteor7.bin
+  → build/meteor7_O2/meteor7.woz
+  → build/meteor7_O2/meteor7.sym
+  → build/meteor7_O2/meteor7.lst
+  → build/meteor7_O2/meteor7.report
+exit=0

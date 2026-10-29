@@ -1,0 +1,49 @@
+// src/bcd_score.ax65 — BCD：10 進のままスコアを数えて表示する
+use console;                            // 1 文字の出力
+use bcd;                                // BCD と整数の変換
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+static SCORE: bcd16 = 0;                // 10 進 4 桁のスコア（$0000）
+static HI: bcd16 = 1500;                // 10 進のリテラルは 10 進の値として BCD になる（$1500）
+
+fn print_bcd16(v: bcd16) {              // 4 桁を表示する
+    for d in v.digits() {               // 上の桁から 1 桁ずつ（0〜9 の u8）
+        console::putc(('0' as u8 + d) as char);
+    }
+}
+
+fn add(points: bcd16) {                 // 点を足して表示する
+    SCORE += points;                    // sed と cld はコンパイラが入れる
+    print(p"SCORE ");
+    print_bcd16(SCORE);
+    if SCORE > HI {                     // 大小の比較はそのままできる
+        print(p"  NEW HIGH SCORE!");
+        HI = SCORE;
+    }
+    newline();
+}
+
+fn main() {
+    add(10);                            // 0010
+    add(25);                            // 0035
+    add(990);                           // 1025
+    add(500);                           // 1525（HI を超える）
+    SCORE -= 25;                        // 引き算もできる：1500
+    print(p"AFTER PENALTY ");
+    print_bcd16(SCORE);
+    newline();
+
+    let n: u16 = bcd::to_u16(SCORE);    // BCD → 整数（as では変換できない）
+    print(p"AS INTEGER, LOW BYTE = ");
+    print_u8(n as u8);                  // 1500 = $05DC の下位 $DC = 220
+    newline();
+
+    let b: bcd16 = bcd::from_u8(200);   // 整数 → BCD（3 桁）
+    print(p"200 IN BCD = ");
+    print_bcd16(b);                     // 0200
+    newline();
+}

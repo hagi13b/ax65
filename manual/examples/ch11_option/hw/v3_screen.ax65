@@ -1,0 +1,24 @@
+// hw/v3_screen.ax65 — screen インターフェースの実装：v3（仮の構成）の画面メモリ（$9000〜$93BF、40 文字 × 24 行）
+//   1 文字 1 バイト。$9000 が左上で、$9000 + 40 × 行 + 列 が（列, 行）の文字。文字コードは ASCII と同じ。
+
+range Col = 0..40;                      // 列（0〜39）
+range Row = 0..24;                      // 行（0〜23）
+
+impl screen {
+    const WIDTH: u8 = 40;               // インターフェースの定数（関数と同じく自動で公開され、pub は書かない）
+    const HEIGHT: u8 = 24;
+
+    io VRAM: [[u8; Col]; Row] @ $9000;  // 画面メモリ（行ごとの先頭番地の表はコンパイラが作る）
+
+    fn clear() {                        // 画面全体を空白にする
+        for r in Row {
+            for c in Col { VRAM[r][c] = ' '@screen as u8; }
+        }
+    }
+
+    fn put(x: u8, y: u8, c: char@screen) {          // 画面の外なら何もしない
+        if let Some(r) = Row::check(y) {
+            if let Some(col) = Col::check(x) { VRAM[r][col] = c as u8; }
+        }
+    }
+}

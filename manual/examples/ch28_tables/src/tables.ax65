@@ -1,0 +1,47 @@
+// src/tables.ax65 — コンパイル時の表：正弦波の表を作って端末に描き、外部ファイルの絵を表示する
+use console;                            // シリアル端末
+use lib::out::newline;                  // 改行
+#[allow(unused_imports)]                // -D debug なしでは使わないので、警告を止める
+use lib::out::{print, print_u8};        // 端末への出力（デバッグ用）
+
+range Gx = 0..40;                       // 端末の列（40 文字）
+range Pr = 0..8;                        // 絵の行・列
+
+comptime fn wave_y(i: int) -> u8 {      // i 列目の波の高さ（行）。コンパイル時だけに呼ばれる
+    round(10.0 - 9.0 * sin(i as real * 2.0 * PI / 40.0)) as u8     // 1〜19 の行。u8 に収まらなければエラー
+}
+
+const WAVE: [u8; Gx] = [for i in 0..40 => wave_y(i)];   // 40 個の表（プログラムには値だけが入る）
+const MASK: [u8; Pr] = [for i in 0..8 => 1 << (7 - i)]; // 左の列ほど上のビット
+const PICTURE: [u8; Pr] = include_bin("../data/smile.bin"); // 8 バイトの絵（1 = 点）
+
+comptime assert(WAVE.len() == 40, "WAVE の長さは 40 列");
+
+fn main() {
+    for y in 0..21 {                    // 上の行から 1 行ずつ描く（0〜20 行）
+        for x in Gx {
+            if WAVE[x] == y {
+                console::putc('*');     // 波（表を引くだけ。sin の計算は実行時にしない）
+            } else if y == 10 {
+                console::putc('-');     // 0 の線
+            } else {
+                console::putc(' ');
+            }
+        }
+        newline();
+    }
+    newline();
+    for r in Pr {                       // 8×8 の絵を描く
+        for c in Pr {
+            if PICTURE[r] & MASK[c] != 0 { console::putc('#'); } else { console::putc('.'); }
+        }
+        newline();
+    }
+    comptime if build.debug {           // -D debug のときだけ、表の中身を端末に出す
+        for x in Gx {
+            print_u8(WAVE[x]);
+            print(p" ");
+        }
+        newline();
+    }
+}

@@ -1,0 +1,61 @@
+// src/sound_demo.ax65 — 音を出す：ビープ、音階、メロディ（きらきら星）
+//   ターゲット：v2x（仮の構成）。音の長さはモニタの DELAY_10MS で待つ
+use sound;                              // 音のインターフェース（v2x では hw::via_sound）
+use lib::notes;                         // 音の高さの表（コンパイル時に計算される）
+use lib::notes::Note;                   // 音の番号の型を、名前だけで使う
+use lib::out::{print, newline};         // 端末への出力
+use hw::hexmon;                         // モニタの API（時間待ち）
+
+comptime assert(target.has(sound), "このプログラムは音のあるターゲット（v2x）用です");
+
+const BEEP_PERIOD: u16 = notes::period_of(1000.0);  // 1000Hz の period（クロックから計算される）
+
+fn beep() {                             // ピッと 0.1 秒鳴らす
+    sound::tone(BEEP_PERIOD);
+    hexmon::delay_10ms(10);
+    sound::off();
+}
+
+fn play(n: Note, len: u8) {             // 1 音鳴らす（len は 10 ミリ秒単位。1〜255）
+    sound::tone(notes::NOTE_PERIOD[n]); // n は Note 型なので、範囲の検査は要らない
+    hexmon::delay_10ms(len);
+    sound::off();
+    hexmon::delay_10ms(2);              // 音と音の間を少しあける
+}
+
+range Sc = 0..8;                        // 音階の 8 音
+const SCALE: [Note; Sc] = [notes::C4, notes::D4, notes::E4, notes::F4,
+                           notes::G4, notes::A4, notes::B4, notes::C5];
+
+struct Step { note: Option<Note>, len: u8 }     // 1 つの音（None は休み）
+range Si = 0..16;                       // メロディの長さ
+const SONG: [Step; Si] = [              // きらきら星（前半）
+    Step { note: Some(notes::C4), len: 30 }, Step { note: Some(notes::C4), len: 30 },
+    Step { note: Some(notes::G4), len: 30 }, Step { note: Some(notes::G4), len: 30 },
+    Step { note: Some(notes::A4), len: 30 }, Step { note: Some(notes::A4), len: 30 },
+    Step { note: Some(notes::G4), len: 60 }, Step { note: None,           len: 10 },
+    Step { note: Some(notes::F4), len: 30 }, Step { note: Some(notes::F4), len: 30 },
+    Step { note: Some(notes::E4), len: 30 }, Step { note: Some(notes::E4), len: 30 },
+    Step { note: Some(notes::D4), len: 30 }, Step { note: Some(notes::D4), len: 30 },
+    Step { note: Some(notes::C4), len: 60 }, Step { note: None,           len: 10 },
+];
+
+fn main() {
+    print(p"BEEP");
+    newline();
+    beep();
+    hexmon::delay_10ms(50);
+
+    print(p"SCALE");
+    newline();
+    for i in Sc { play(SCALE[i], 20); } // ドレミファソラシド
+
+    print(p"MELODY");
+    newline();
+    for i in Si {
+        match SONG[i].note {
+            Some(n) => play(n, SONG[i].len),
+            None    => hexmon::delay_10ms(SONG[i].len),  // 休み
+        }
+    }
+}

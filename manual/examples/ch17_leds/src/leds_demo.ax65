@@ -1,0 +1,39 @@
+// src/leds_demo.ax65 — メモリマップト I/O：ユーザー LED を光らせ、ユーザースイッチを読む
+use hw::user_io;                        // LED とスイッチ（init で PA7〜PA4 を出力にする）
+use hw::user_io::Pa;                    // ポートA のビットの名前を、名前だけで使う
+use hw::hexmon;                         // モニタの API（時間待ちに使う）
+
+fn main() {
+    for v in 0..16 {                    // 0〜15 を 2 進数で LED に出す
+        user_io::leds(v);
+        hexmon::delay_ms(250);          // 250 ミリ秒待つ（モニタの DELAY_MS）
+    }
+
+    let pos: u8 = $08;                  // 光る位置（D0 から始める）
+    for n in 0..6 {                     // 光を D0 → D3 → D0 と往復させる
+        user_io::leds(pos);
+        hexmon::delay_ms(120);
+        if n < 3 { pos = pos >> 1; } else { pos = pos << 1; }
+    }
+
+    user_io::leds(0);
+    user_io::led_on(Pa::D0);            // 1 個だけつける（tsb）
+    user_io::led_on(Pa::D3);            // もう 1 個つける
+    hexmon::delay_ms(250);
+    user_io::led_off(Pa::D0);           // 1 個だけ消す（trb）
+    hexmon::delay_ms(250);
+
+    let count: u8 = 0;                  // S0 を押した回数
+    user_io::leds(count);
+    loop {                              // S0 を押して離すたびに数える。S3 で終わる
+        if user_io::pressed(Pa::S3) { break; }
+        if user_io::pressed(Pa::S0) {
+            hexmon::delay_ms(20);       // 接点の揺れ（チャタリング）が収まるのを待つ
+            while user_io::pressed(Pa::S0) { }  // 離すまで待つ（押している間、LED にはアドレスが出る）
+            hexmon::delay_ms(20);       // 離したときの揺れも待つ
+            count += 1;
+            user_io::leds(count);       // 離してから、数を LED に出す（下位 4 ビット）
+        }
+    }
+    user_io::leds(0);                   // 全部消して終わる（モニタに戻っても LED はそのまま残るため）
+}

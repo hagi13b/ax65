@@ -1,0 +1,18 @@
+// targets/v3.target — v2 に文字画面を足し、クロックを 2MHz に上げた構成
+target v3 extends v2 {
+    clock        = 2_000_000;           // 2MHz に上げた（v2 の 1MHz を置き換える）
+    irq_interval = 33_333;              // 1/60 秒（2MHz で数えたサイクル数）
+    load         = $0800;               // 画面メモリ（$0400〜$07FF）の後ろに読み込む
+
+    region ram = [$0200..=$03FF, $0800..=$BFFF];    // 同じ種類の区画は置き換え
+    region io  = [$0400..=$07FF, $6000..=$8FFF];    // 画面メモリを I/O の区画に加える
+
+    encoding screen {                   // 画面用の文字の変換表（Apple II と同じ並び）
+        ' '..='?' => $A0..=$BF;
+        '@'..='_' => $C0..=$DF;
+    }
+
+    bind screen = hw::v3_screen;        // 画面の実装（v2 にない bind を足す）
+    const SCREEN_WIDTH: u8 = 40;        // 画面の幅（文字）
+    const RAM_KB: u8 = 46;              // 同じ名前の定数は置き換え
+}

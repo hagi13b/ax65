@@ -1,0 +1,16 @@
+// src/hello.ax65 — 最初のプログラム：端末に HELLO, WORLD! と表示する
+use console;                            // 1 文字の入出力のインターフェース（実装はターゲットの bind で決まる）
+
+const MSG: str = p"HELLO, WORLD!";      // 長さ付きの文字列（先頭の 1 バイトに長さが入る）
+
+fn print(s: str) {                      // 文字列を 1 文字ずつ送る関数
+    for c in s {                        // s の長さの分だけくり返す。c は 1 文字（char）
+        console::putc(c);               // 1 文字送る
+    }
+}
+
+fn main() {                             // プログラムはここから始まる
+    print(MSG);                         // 文字列を表示する
+    console::putc('\r');                // 行の先頭に戻る（復帰）
+    console::putc('\n');                // 次の行へ進む（改行）
+}                                       // main が終わるとモニタ（Wozmon）へ戻る

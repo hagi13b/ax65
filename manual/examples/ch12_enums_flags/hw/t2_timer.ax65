@@ -1,0 +1,27 @@
+// hw/t2_timer.ax65 — GPIO（6522 互換）のタイマー T2 を、ワンショットで使うモジュール
+//   T2 は CPU のクロック（約 1.8425MHz）で 1 ずつ減り、0 になると IFR（$800D）のビット5 が立つ。
+//   T2CH（$8009）を書くと数え始め、T2CL（$8008）を読むとビット5 が消える。1 ミリ秒は約 1842 カウント。
+//   T1（$8004〜$8007）と ACR（$800B）はモニタが使うので、ターゲット定義で reserve されている。
+
+flags Ifr { Ca2, Ca1, Shift, Cb2, Cb1, T2, T1, Any }   // 割り込みフラグのビット0〜7（ビット5 が T2）
+
+io      T2C_L: u8  @ $8008;             // T2 の下位（書くとカウンタの下位、読むとフラグが消える）
+io(out) T2C_H: u8  @ $8009;             // T2 の上位（書くと数え始める）
+io(in)  IFR:   Ifr @ $800D;             // 割り込みフラグ
+
+pub const PER_MS:   u16 = (target.clock / 1000) as u16;    // 1 ミリ秒のカウント数（v2 では 1842）
+pub const PER_10MS: u16 = (target.clock / 100) as u16;     // 10 ミリ秒のカウント数（v2 では 18425）
+
+pub fn start(count: u16) {              // count 回数えたらフラグを立てる（最大 65535 ≒ 35 ミリ秒）
+    let _ = T2C_L;                      // 前のフラグを消しておく（読み捨て。bit 命令になる）
+    T2C_L = count as u8;                // 下位を先に書く
+    T2C_H = (count >> 8) as u8;         // 上位を書くと数え始める
+}
+
+pub fn expired() -> bool {              // 数え終わったか（フラグが立ったか）
+    IFR.contains(Ifr::T2)
+}
+
+pub fn wait() {                         // 数え終わるまで待つ
+    while !expired() { }
+}

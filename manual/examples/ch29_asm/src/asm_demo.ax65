@@ -1,0 +1,71 @@
+// src/asm_demo.ax65 — インラインアセンブリ：asm fn、asm ブロック、レジスタでの受け渡し
+use lib::out::{print, newline, print_hex8, print_u16};  // 端末への出力
+
+static SEED: u8 = $5A;                  // 乱数の種
+static COUNTER: u16 = 0;                // 16 ビットのカウンタ
+static TMP: u8 = 0;                     // reverse_bits の作業用
+
+asm fn rand_step(r: u8) -> u8 {         // 8 ビットの疑似乱数。r は A で届き、A で返す
+    asl a                   ; A を左に 1 ビットずらす（はみ出たビットはキャリーへ）
+    bcc done                ; はみ出たビットが 0 なら done へ飛ぶ
+    eor #$1D                ; 1 なら決まった値と XOR を取る
+done:                       ; 合流地点
+    rts                     ; A を戻り値として返す
+}
+
+fn rand() -> u8 {
+    SEED = rand_step(SEED);
+    SEED
+}
+
+fn add16(n: u8) {                       // COUNTER += n をアセンブリで書く
+    asm {
+        clc                     ; 足し算の準備（キャリーを 0 に）
+        lda {COUNTER.lo}        ; 言語の変数は {名前} で参照する。2 バイトの変数は .lo / .hi
+        adc {n}                 ; 引数 n を足す
+        sta {COUNTER.lo}        ; 下位を書く
+        lda {COUNTER.hi}        ; 上位を読む
+        adc #0                  ; 繰り上がりを足す
+        sta {COUNTER.hi}        ; 上位を書く
+    }
+}
+
+fn reverse_bits(v: u8) -> u8 {          // ビットの並びを左右逆にする
+    let r: u8;
+    asm (in A = v, out A -> r) {        // v を A に入れて始め、終わったときの A を r に入れる
+        ldx #8                  ; 8 ビット分くり返す
+    loop:                       ; ブロックの中だけで有効なラベル
+        lsr a                   ; 最下位ビットをキャリーへ
+        rol {TMP}               ; キャリーを TMP の最下位へ入れる
+        dex                     ; 残りを 1 減らす
+        bne loop                ; 残っていればくり返す
+        lda {TMP}               ; 結果を A に（出口で r に入る）
+    }
+    r
+}
+
+fn main() {
+    print(p"RANDOM:");
+    let n: u8 = 8;
+    while n > 0 {                       // 8 個表示する
+        print(p" $");
+        print_hex8(rand());
+        n -= 1;
+    }
+    newline();
+
+    let k: u8 = 0;
+    while k < 200 {                     // 0 + 1 + … + 199 = 19900
+        add16(k);
+        k += 1;
+    }
+    print(p"SUM 0..199 = ");
+    print_u16(COUNTER);
+    newline();
+
+    print(p"REVERSE $01 = $");
+    print_hex8(reverse_bits($01));      // $80
+    print(p", $A0 = $");
+    print_hex8(reverse_bits($A0));      // $05
+    newline();
+}

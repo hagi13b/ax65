@@ -1,0 +1,57 @@
+// src/arrays.ax65 — 配列と範囲型：さいころを 60 回ふって、出た目を数える
+use console;                            // 1 文字の出力
+use text::u8_to_dec;                    // 数値を 10 進の文字列にする
+
+fn print(s: str) { for c in s { console::putc(c); } }      // 文字列を出す
+fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn print_u8(n: u8) { let s = u8_to_dec(n); print(s.as_str()); }   // 0〜255 を出す
+
+range Face = 0..6;                      // さいころの目の番号（0〜5。表示するときに 1 を足す）
+
+static COUNTS: [u8; Face] = [0; Face];  // 目ごとの回数（添字は Face 型だけ）
+static SEED: u8 = $5A;                  // 乱数の種（0 以外）
+
+fn rand() -> u8 {                       // 8 ビットの疑似乱数（ガロア型 LFSR。0 にはならない）
+    let r = SEED;
+    let carry = r & $80 != 0;           // 最上位ビット（& は != より強く結び付く）
+    r = r << 1;                         // 左へ 1 ビット
+    if carry { r = r ^ $1D; }           // はみ出たら決まった値と XOR
+    SEED = r;
+    r
+}
+
+fn roll() -> Face {                     // 0〜5 のどれかを返す
+    loop {
+        let r = rand() & 7;             // 0〜7
+        if let Some(f) = Face::check(r) {   // 0〜5 なら Face として使える
+            return f;
+        }                               // 6 と 7 は捨ててやり直す（目の偏りをなくす）
+    }
+}
+
+fn bar(n: u8) {                         // n 個の * を並べる
+    while n > 0 {                       // 引数 n は関数の中で書き換えてよい
+        console::putc('*');
+        n -= 1;
+    }
+}
+
+fn main() {
+    let n: u8 = 60;
+    while n > 0 {                       // 60 回くり返す
+        let f = roll();
+        COUNTS[f] += 1;                 // f は Face 型なので、範囲の検査は要らない
+        n -= 1;
+    }
+    for f in Face {                     // 範囲型のすべての値を回す
+        print_u8(f as u8 + 1);          // 範囲型を u8 にして 1 を足す
+        print(p": ");
+        bar(COUNTS[f]);
+        print(p" ");
+        print_u8(COUNTS[f]);
+        newline();
+    }
+    print(p"FACES = ");
+    print_u8(COUNTS.len());             // 配列の長さ（コンパイル時の定数）：6
+    newline();
+}
