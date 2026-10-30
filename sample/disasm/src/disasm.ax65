@@ -193,7 +193,7 @@ const HEX: [char; Nib] = ['0', '1', '2', '3', '4', '5', '6', '7',
                           '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'];
 
 fn print(s: str) { for c in s { console::putc(c); } }      // 長さ付きの文字列を出す
-fn newline() { console::putc('\r'); console::putc('\n'); } // 改行する
+fn newline() { console::putc('\r'); } // 改行する
 
 fn spaces(n: u8) {                      // 空白を n 個出す
     for _i in 0..n { console::putc(' '); }
